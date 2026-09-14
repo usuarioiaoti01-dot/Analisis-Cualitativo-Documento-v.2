@@ -8,6 +8,17 @@ con el catálogo normativo de la entidad.
 
 La interfaz se publica con el nombre **DocuCalidad**.
 
+## El proceso
+
+El sistema implementa un proceso de siete etapas —registro, matriz de criterios,
+extracción, evaluación cualitativa, validación normativa, comparación con el
+repositorio e informe— sobre cinco dimensiones ponderadas y una escala de 1 a 5.
+Qué está construido y qué no, etapa por etapa, está en
+[`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
+
+**Estado actual:** las etapas 1 a 3 funcionan; la 4 tiene un motor provisional
+que no analiza el contenido; las etapas 5, 6 y 7 no están implementadas.
+
 ## Origen
 
 Esta versión reproduce el front y el back del prototipo publicado en
@@ -42,7 +53,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 |---|---|
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos. Los valores son de demostración (ver `src/lib/demo.ts`). |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
-| **Evaluaciones** | Ejecución de evaluaciones y administración de matrices de criterios. Operativo. |
+| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Ejecuta evaluaciones y guarda el resultado de cada criterio. El motor es provisional: no analiza el contenido. |
 | **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
@@ -55,7 +66,8 @@ Todas las rutas responden JSON.
 |---|---|
 | `GET /api/documents` | Lista el repositorio documental. |
 | `POST /api/documents` | Registra un documento. Con `multipart/form-data` (`file`, `document_type`) guarda el archivo y extrae su texto; con JSON (`{ title, document_type }`) registra solo la ficha. |
-| `GET /api/documents/[id]` | Ficha del documento con su texto extraído. |
+| `GET /api/documents/[id]` | Ficha del documento con sus secciones, evaluaciones, resultados por criterio y hallazgos. |
+| `GET /api/documents/[id]/texto` | Texto extraído completo, aparte para no cargarlo en cada apertura de la ficha. |
 | `DELETE /api/documents/[id]` | Elimina el documento, su texto y el archivo original. |
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
@@ -66,11 +78,17 @@ Todas las rutas responden JSON.
 
 ### Cálculo del puntaje
 
-`POST /api/evaluations` **no ejecuta todavía un análisis del contenido del
-documento**. Calcula un puntaje ponderado determinista a partir del
-identificador del documento y de los pesos de la matriz, de modo que el flujo
-completo (ejecutar → actualizar estado → reflejar en el repositorio) sea
-reproducible y verificable. El umbral de estados es:
+`POST /api/evaluations` **no analiza el contenido del documento**. Puntúa cada
+criterio de forma determinista a partir del identificador del documento y del
+criterio, de modo que el flujo completo —ejecutar, guardar el resultado de cada
+criterio, actualizar el estado del documento— quede ejercitado y verificable
+mientras se construye el motor real.
+
+Cada evaluación se marca con `engine = 'deterministic'`, la interfaz lo advierte,
+y por la misma razón el motor **no emite hallazgos**: un hallazgo con evidencia
+inventada sería peor que ninguno.
+
+El aporte de un criterio es `(puntaje / escala) × peso`. El umbral de estados:
 
 | Puntaje | Severidad | Estado |
 |---|---|---|
@@ -78,8 +96,8 @@ reproducible y verificable. El umbral de estados es:
 | 75 – 84 | Medio | En revisión |
 | < 75 | Alto | Observado |
 
-Sustituir `computeScore` en `src/app/api/evaluations/route.ts` por el motor real
-es el siguiente paso; el resto del flujo no necesita cambios.
+Sustituir `puntajeDeterminista` en `src/app/api/evaluations/route.ts` por el
+motor real es el siguiente paso; el resto del flujo no necesita cambios.
 
 ## Carga y extracción de texto
 
@@ -107,6 +125,7 @@ src/
     api/
       documents/route.ts              GET, POST (carga de archivo)
       documents/[id]/route.ts         GET, DELETE
+      documents/[id]/texto/route.ts   GET (texto extraído completo)
       documents/[id]/archivo/route.ts GET (archivo original)
       evaluations/route.ts            GET, POST (ejecutar evaluación)
       evaluations/templates/route.ts  POST (crear matriz)
@@ -117,9 +136,10 @@ src/
     db.ts       Conexión, esquema y migraciones SQLite
     almacen.ts  Guardado y lectura de los archivos originales
     extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
+    segmentacion.ts Corte del texto en secciones numeradas
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
-    rubric.ts   Rúbrica base y normas prioritarias
+    rubric.ts   Matrices por tipo documental, escala y normas prioritarias
     demo.ts     Datos de demostración del panel de resumen
     types.ts    Tipos compartidos
     sections.ts Secciones del espacio de trabajo
@@ -129,7 +149,8 @@ src/
 
 SQLite, archivo único. La ruta se configura con `SACD_DB_PATH` (ver
 `.env.example`). El esquema se crea al primer arranque e incluye `documents`,
-`document_contents`, `templates`, `criteria`, `evaluations`, `findings` y `norms`.
+`document_contents`, `document_sections`, `templates`, `criteria`, `evaluations`,
+`evaluation_results`, `findings`, `norms` y `document_similarities`.
 Las bases creadas con versiones anteriores del esquema se actualizan solas al
 arrancar, sin perder datos.
 
@@ -137,9 +158,17 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
 
 ## Pendientes conocidos
 
-- Motor de análisis real: evaluar el texto extraído contra cada criterio,
-  verificar citas y detectar duplicidad. Hoy el puntaje es determinista, no
-  analítico. El texto del documento ya está disponible para alimentarlo.
+- **Etapa 4** — motor de análisis real: evaluar el texto extraído contra cada
+  criterio y emitir hallazgos con evidencia citada. Hoy el puntaje es
+  determinista, no analítico.
+- **Etapa 5** — validación normativa: reconocer las citas del documento y
+  contrastarlas contra el catálogo (vigencia, artículo, pertinencia).
+- **Etapa 6** — comparación con el repositorio: similitud documental, versiones
+  previas y cláusulas repetidas.
+- **Etapa 7** — informe consolidado, validación humana de cada hallazgo y
+  exportación.
+- Metadatos de la etapa 1: autor, unidad responsable, fecha propia del documento,
+  versionado y carga múltiple.
 - OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».
 - Autenticación y autorización. La sesión de la barra lateral es fija.
 - Los módulos «Usuarios y roles» y «Configuración» son marcadores.

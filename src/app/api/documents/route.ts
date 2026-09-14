@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
 import { guardarArchivo } from '@/lib/almacen';
 import { detectarFormato, extraerTexto } from '@/lib/extraccion';
+import { segmentar } from '@/lib/segmentacion';
 import type { DocumentRecord, ExtractionStatus } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -121,6 +122,28 @@ async function registrarConArchivo(request: Request) {
       db.prepare(
         'INSERT INTO document_contents (document_id, content, extracted_at) VALUES (?, ?, ?)',
       ).run(id, content, now);
+
+      // Etapa 3: segmentar deja al documento listo para que un hallazgo pueda
+      // citar una sección concreta en lugar de un rango de caracteres.
+      const insertSection = db.prepare(
+        `INSERT INTO document_sections
+           (document_id, ordinal, numbering, heading, content, page_from, page_to, char_start, char_end)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+
+      for (const seccion of segmentar(content)) {
+        insertSection.run(
+          id,
+          seccion.ordinal,
+          seccion.numbering,
+          seccion.heading,
+          seccion.content,
+          seccion.pageFrom,
+          seccion.pageTo,
+          seccion.charStart,
+          seccion.charEnd,
+        );
+      }
     }
   });
 

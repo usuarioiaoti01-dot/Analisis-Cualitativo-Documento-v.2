@@ -45,9 +45,11 @@ export interface DocumentRecord {
   extraction_notes: string | null;
 }
 
-/** Documento con su texto extraído, para la vista de detalle. */
+/**
+ * Ficha de detalle del documento. No incluye el texto completo: ese se pide
+ * aparte a `/api/documents/[id]/texto` cuando el usuario lo abre.
+ */
 export interface DocumentDetail extends DocumentRecord {
-  content: string | null;
   extracted_at: number | null;
 }
 
@@ -56,6 +58,99 @@ export interface CriterionRecord {
   dimension: string;
   description: string;
   weight: number;
+  /** Pregunta concreta que debe responder el evaluador. */
+  indicator?: string | null;
+  /** Tope de la escala ordinal del criterio. */
+  scale_max?: number;
+  rule?: string | null;
+}
+
+/** Resultado cualitativo de un criterio. */
+export type CriterionOutcome = 'cumple' | 'parcial' | 'no_cumple' | 'no_aplica';
+
+export const OUTCOME_LABEL: Record<CriterionOutcome, string> = {
+  cumple: 'Cumple',
+  parcial: 'Cumple parcialmente',
+  no_cumple: 'No cumple',
+  no_aplica: 'No aplica',
+};
+
+/** Nivel de riesgo de un hallazgo. */
+export type Risk = 'bajo' | 'medio' | 'alto' | 'critico';
+
+export const RISK_LABEL: Record<Risk, string> = {
+  bajo: 'Bajo',
+  medio: 'Medio',
+  alto: 'Alto',
+  critico: 'Crítico',
+};
+
+/** Motor que produjo una evaluación. */
+export type EvaluationEngine = 'deterministic' | 'ai' | 'manual';
+
+export const ENGINE_LABEL: Record<EvaluationEngine, string> = {
+  deterministic: 'Determinista (sin análisis de contenido)',
+  ai: 'Asistido por IA',
+  manual: 'Manual',
+};
+
+/** Origen de un hallazgo. */
+export type FindingSource = 'evaluacion' | 'normativa' | 'similitud';
+
+/** Estado de atención de un hallazgo. */
+export type FindingStatus = 'pendiente' | 'aceptado' | 'descartado' | 'subsanado';
+
+export const FINDING_STATUS_LABEL: Record<FindingStatus, string> = {
+  pendiente: 'Pendiente',
+  aceptado: 'Aceptado',
+  descartado: 'Descartado',
+  subsanado: 'Subsanado',
+};
+
+/** Una sección del documento, tal como quedó tras la segmentación. */
+export interface SectionRecord {
+  id: number;
+  document_id: string;
+  ordinal: number;
+  numbering: string | null;
+  heading: string;
+  /** Extracto del cuerpo. El listado no transporta la sección completa. */
+  content: string;
+  content_length?: number;
+  page_from: number | null;
+  page_to: number | null;
+  char_start: number;
+  char_end: number;
+}
+
+/** Resultado de un criterio dentro de una evaluación. */
+export interface EvaluationResultRecord {
+  id: number;
+  evaluation_id: string;
+  criterion_id: number;
+  dimension: string;
+  result: CriterionOutcome;
+  raw_score: number | null;
+  weighted_score: number | null;
+  comment: string | null;
+  /** Datos del criterio, incorporados por la consulta de detalle. */
+  criterion_description?: string;
+  criterion_indicator?: string | null;
+  criterion_weight?: number;
+  scale_max?: number;
+}
+
+export interface EvaluationRecord {
+  id: string;
+  document_id: string;
+  template_id: number;
+  score: number | null;
+  status: DocumentStatus;
+  created_at: number;
+  engine: EvaluationEngine;
+  validated_by: string | null;
+  validated_at: number | null;
+  validation_note: string | null;
 }
 
 export interface TemplateRecord {
@@ -73,15 +168,49 @@ export interface NormRecord {
   issuer: string;
   subject: string;
   status: string;
+  article: string | null;
+  source_url: string | null;
+  published_at: number | null;
+  effective_from: number | null;
+  effective_to: number | null;
+  aliases: string | null;
+}
+
+/** Coincidencia entre el documento evaluado y otro del repositorio. */
+export interface SimilarityRecord {
+  id: number;
+  document_id: string;
+  compared_id: string;
+  similarity: number;
+  kind: string;
+  fragments: string | null;
+  computed_at: number;
 }
 
 export interface FindingRecord {
   id: number;
-  document_id: string | null;
+  document_id: string;
+  evaluation_id: string | null;
+  criterion_id: number | null;
   dimension: string;
-  severity: Severity;
+  source: FindingSource;
+  result: CriterionOutcome | null;
+  risk: Risk;
   message: string;
-  location: string;
+  /** Cita textual exacta del documento que sustenta el hallazgo. */
+  evidence_text: string | null;
+  /** Ubicación legible: «Sección 4.2 · pág. 7». */
+  evidence_location: string | null;
+  section_id: number | null;
+  recommendation: string | null;
+  /** Norma o documento con el que se contrastó. */
+  reference_kind: string | null;
+  reference_id: string | null;
+  reference_label: string | null;
+  status: FindingStatus;
+  resolved_by: string | null;
+  resolved_at: number | null;
+  created_at: number;
 }
 
 export interface DimensionScore {

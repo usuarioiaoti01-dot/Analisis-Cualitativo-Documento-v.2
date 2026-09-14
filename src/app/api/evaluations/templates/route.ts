@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     );
 
     const insert = db.prepare(
-      'INSERT INTO criteria (template_id, dimension, description, weight, position) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO criteria
+         (template_id, dimension, description, weight, position, indicator, scale_max, rule)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     criteria.forEach((criterion, index) => {
       insert.run(
@@ -58,6 +60,9 @@ export async function POST(request: Request) {
         String(criterion.description ?? '').trim(),
         Number(criterion.weight ?? 0),
         index,
+        criterion.indicator ? String(criterion.indicator).trim() : null,
+        Number(criterion.scale_max ?? 5),
+        criterion.rule ? String(criterion.rule).trim() : null,
       );
     });
 

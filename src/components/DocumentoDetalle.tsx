@@ -3,10 +3,19 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import {
+  ENGINE_LABEL,
   EXTRACTION_LABEL,
+  OUTCOME_LABEL,
+  RISK_LABEL,
   STATUS_LABEL,
+  type CriterionOutcome,
   type DocumentDetail,
+  type EvaluationRecord,
+  type EvaluationResultRecord,
   type ExtractionStatus,
+  type FindingRecord,
+  type Risk,
+  type SectionRecord,
 } from '@/lib/types';
 
 const EXTRACTION_TONE: Record<ExtractionStatus, string> = {
@@ -16,15 +25,42 @@ const EXTRACTION_TONE: Record<ExtractionStatus, string> = {
   failed: 'bg-sev-high-bg text-sev-high-ink',
 };
 
+const OUTCOME_TONE: Record<CriterionOutcome, string> = {
+  cumple: 'bg-sev-low-bg text-sev-low-ink',
+  parcial: 'bg-sev-medium-bg text-sev-medium-ink',
+  no_cumple: 'bg-sev-high-bg text-sev-high-ink',
+  no_aplica: 'bg-slate-100 text-slate-600',
+};
+
+const RISK_TONE: Record<Risk, string> = {
+  bajo: 'bg-sev-low-bg text-sev-low-ink',
+  medio: 'bg-sev-medium-bg text-sev-medium-ink',
+  alto: 'bg-sev-high-bg text-sev-high-ink',
+  critico: 'bg-sev-high-ink text-white',
+};
+
+type Pestana = 'secciones' | 'resultados' | 'hallazgos' | 'texto';
+
+interface Respuesta {
+  document: DocumentDetail;
+  sections: SectionRecord[];
+  evaluations: EvaluationRecord[];
+  results: EvaluationResultRecord[];
+  findings: FindingRecord[];
+}
+
 interface DocumentoDetalleProps {
   documentId: string;
   onBack: () => void;
 }
 
 export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) {
-  const [document, setDocument] = useState<DocumentDetail | null>(null);
+  const [data, setData] = useState<Respuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pestana, setPestana] = useState<Pestana>('secciones');
+  const [texto, setTexto] = useState<string | null>(null);
+  const [textoCargando, setTextoCargando] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +76,7 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
           setError(payload.error ?? 'No fue posible cargar el documento.');
           return;
         }
-        setDocument(payload.document);
+        setData(payload);
         setError(null);
       } finally {
         if (!cancelled) setLoading(false);
@@ -53,6 +89,18 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
     };
   }, [documentId]);
 
+  // El texto completo pesa cientos de kilobytes: se pide solo al abrir su pestaña.
+  useEffect(() => {
+    if (pestana !== 'texto' || texto !== null || textoCargando) return;
+
+    setTextoCargando(true);
+    fetch(`/api/documents/${documentId}/texto`)
+      .then((response) => response.json())
+      .then((payload) => setTexto(payload.content ?? payload.error ?? ''))
+      .catch(() => setTexto('No fue posible cargar el texto.'))
+      .finally(() => setTextoCargando(false));
+  }, [pestana, texto, textoCargando, documentId]);
+
   if (loading) {
     return (
       <section className="card px-6 py-16 text-center text-ink-muted">
@@ -62,7 +110,7 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
     );
   }
 
-  if (error || !document) {
+  if (error || !data) {
     return (
       <section className="card px-6 py-16 text-center">
         <p className="text-sm text-sev-high-ink">{error}</p>
@@ -77,6 +125,9 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
     );
   }
 
+  const { document, sections, evaluations, results, findings } = data;
+  const ultima = evaluations[0];
+
   const metadatos = [
     { label: 'Tipo documental', value: document.document_type },
     { label: 'Estado', value: STATUS_LABEL[document.status] },
@@ -84,8 +135,15 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
     { label: 'Archivo', value: document.file_name ?? '—' },
     { label: 'Tamaño', value: document.file_size ? formatearTamano(document.file_size) : '—' },
     { label: 'Páginas / hojas', value: document.page_count?.toString() ?? '—' },
+    { label: 'Secciones', value: sections.length.toString() },
     { label: 'Caracteres extraídos', value: document.char_count?.toLocaleString('es-PE') ?? '—' },
-    { label: 'Cargado', value: new Date(document.created_at).toLocaleString('es-PE') },
+  ];
+
+  const pestanas: { id: Pestana; label: string; count: number }[] = [
+    { id: 'secciones', label: 'Secciones', count: sections.length },
+    { id: 'resultados', label: 'Resultados por criterio', count: results.length },
+    { id: 'hallazgos', label: 'Hallazgos', count: findings.length },
+    { id: 'texto', label: 'Texto completo', count: 0 },
   ];
 
   return (
@@ -107,11 +165,18 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
             </span>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold break-words text-ink">{document.title}</h2>
-              <span
-                className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${EXTRACTION_TONE[document.extraction_status]}`}
-              >
-                {EXTRACTION_LABEL[document.extraction_status]}
-              </span>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${EXTRACTION_TONE[document.extraction_status]}`}
+                >
+                  {EXTRACTION_LABEL[document.extraction_status]}
+                </span>
+                {document.quality_score !== null && (
+                  <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                    {document.quality_score}/100 de calidad
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -147,23 +212,189 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
         )}
       </section>
 
-      <section className="card p-6">
-        <h3 className="text-lg font-semibold text-ink">Texto extraído</h3>
-        <p className="mt-0.5 text-sm text-ink-muted">
-          Contenido que alimentará la evaluación contra la matriz de criterios.
-        </p>
+      <section className="card">
+        <nav className="flex gap-1 border-b border-hairline px-4" aria-label="Secciones del documento">
+          {pestanas.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setPestana(tab.id)}
+              className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                pestana === tab.id
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-ink-muted hover:text-ink'
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && <span className="ml-1.5 text-xs text-ink-muted">{tab.count}</span>}
+            </button>
+          ))}
+        </nav>
 
-        {document.content ? (
-          <pre className="mt-5 max-h-[32rem] overflow-auto rounded-lg border border-hairline bg-canvas/50 p-5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-ink">
-            {document.content}
-          </pre>
-        ) : (
-          <p className="py-12 text-center text-sm text-ink-muted">
-            No hay texto extraído para este documento.
-          </p>
-        )}
+        <div className="p-6">
+          {pestana === 'secciones' && <Secciones sections={sections} />}
+          {pestana === 'resultados' && <Resultados results={results} evaluacion={ultima} />}
+          {pestana === 'hallazgos' && <Hallazgos findings={findings} />}
+          {pestana === 'texto' &&
+            (textoCargando || texto === null ? (
+              <p className="py-10 text-center text-sm text-ink-muted">
+                <Loader2 className="mx-auto size-5 animate-spin" aria-hidden />
+                <span className="mt-2 block">Cargando texto…</span>
+              </p>
+            ) : (
+              <pre className="max-h-[32rem] overflow-auto rounded-lg border border-hairline bg-canvas/50 p-5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-ink">
+                {texto}
+              </pre>
+            ))}
+        </div>
       </section>
     </div>
+  );
+}
+
+function Secciones({ sections }: { sections: SectionRecord[] }) {
+  if (sections.length === 0) {
+    return <p className="py-10 text-center text-sm text-ink-muted">El documento no tiene secciones reconocidas.</p>;
+  }
+
+  return (
+    <ul className="divide-y divide-hairline">
+      {sections.map((section) => (
+        <li key={section.id} className="py-4">
+          <div className="flex items-baseline gap-3">
+            {section.numbering && (
+              <span className="shrink-0 rounded bg-blue-50 px-2 py-0.5 font-mono text-xs text-blue-700">
+                {section.numbering}
+              </span>
+            )}
+            <h3 className="font-medium text-ink">{section.heading}</h3>
+            {section.page_from && (
+              <span className="ml-auto shrink-0 text-xs text-ink-muted">pág. {section.page_from}</span>
+            )}
+          </div>
+          {section.content && (
+            <p className="mt-1.5 line-clamp-3 text-sm text-ink-muted">{section.content}</p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Resultados({
+  results,
+  evaluacion,
+}: {
+  results: EvaluationResultRecord[];
+  evaluacion: EvaluationRecord | undefined;
+}) {
+  if (results.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-ink-muted">
+        Este documento aún no se ha evaluado contra una matriz.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {evaluacion && (
+        <p className="mb-4 flex items-start gap-2 rounded-lg bg-sev-medium-bg px-4 py-3 text-sm text-sev-medium-ink">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          Motor: {ENGINE_LABEL[evaluacion.engine]}. Ejecutada el{' '}
+          {new Date(evaluacion.created_at).toLocaleString('es-PE')}.
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-hairline">
+        <table className="w-full min-w-[36rem] text-left text-sm">
+          <thead>
+            <tr className="bg-canvas/70 text-[0.6875rem] tracking-[0.12em] text-ink-muted uppercase">
+              <th className="px-5 py-3 font-semibold">Criterio</th>
+              <th className="px-5 py-3 font-semibold">Resultado</th>
+              <th className="px-5 py-3 font-semibold">Puntaje</th>
+              <th className="px-5 py-3 font-semibold">Peso</th>
+              <th className="px-5 py-3 font-semibold">Aporte</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-hairline">
+            {results.map((result) => (
+              <tr key={result.id} className="align-top">
+                <td className="px-5 py-3">
+                  <p className="text-xs text-ink-muted">{result.dimension}</p>
+                  <p className="font-medium text-ink">{result.criterion_description}</p>
+                  {result.criterion_indicator && (
+                    <p className="mt-0.5 max-w-lg text-xs text-ink-muted">{result.criterion_indicator}</p>
+                  )}
+                </td>
+                <td className="px-5 py-3">
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${OUTCOME_TONE[result.result]}`}
+                  >
+                    {OUTCOME_LABEL[result.result]}
+                  </span>
+                </td>
+                <td className="px-5 py-3 whitespace-nowrap text-ink-muted">
+                  {result.raw_score ?? '—'} / {result.scale_max ?? 5}
+                </td>
+                <td className="px-5 py-3 text-ink-muted">{result.criterion_weight ?? '—'}%</td>
+                <td className="px-5 py-3 whitespace-nowrap text-ink-muted">
+                  {result.weighted_score !== null ? `${result.weighted_score.toFixed(1)} pts` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Hallazgos({ findings }: { findings: FindingRecord[] }) {
+  if (findings.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-ink-muted">
+        Sin hallazgos registrados. El motor determinista no los emite: se producirán con la
+        validación normativa, la comparación con el repositorio y el análisis de contenido.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-hairline">
+      {findings.map((finding) => (
+        <li key={finding.id} className="py-4">
+          <div className="flex items-start gap-4">
+            <span
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${RISK_TONE[finding.risk]}`}
+            >
+              {RISK_LABEL[finding.risk]}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-ink-muted">{finding.dimension}</p>
+              <p className="font-medium text-ink">{finding.message}</p>
+
+              {finding.evidence_text && (
+                <blockquote className="mt-2 border-l-2 border-hairline pl-3 text-sm text-ink-muted italic">
+                  {finding.evidence_text}
+                </blockquote>
+              )}
+              {finding.evidence_location && (
+                <p className="mt-1 text-xs text-ink-muted">{finding.evidence_location}</p>
+              )}
+              {finding.recommendation && (
+                <p className="mt-2 text-sm text-ink">
+                  <strong className="font-medium">Recomendación:</strong> {finding.recommendation}
+                </p>
+              )}
+              {finding.reference_label && (
+                <p className="mt-1 text-xs text-ink-muted">Contrastado con: {finding.reference_label}</p>
+              )}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

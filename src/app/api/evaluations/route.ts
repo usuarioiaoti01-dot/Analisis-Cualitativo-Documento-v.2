@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { getDb } from '@/lib/db';
 import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
-import type { CriterionRecord, TemplateRecord } from '@/lib/types';
+import type { CriterionOutcome, CriterionRecord, TemplateRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +23,9 @@ export function GET() {
     'SELECT id, name, document_type, active FROM templates ORDER BY id',
   );
 
-  const CRITERIA_SQL =
-    'SELECT id, dimension, description, weight FROM criteria WHERE template_id = ? ORDER BY position, id';
+  const CRITERIA_SQL = `
+    SELECT id, dimension, description, weight, indicator, scale_max, rule
+    FROM criteria WHERE template_id = ? ORDER BY position, id`;
 
   return NextResponse.json({
     documents,
@@ -37,11 +38,14 @@ export function GET() {
 
 /**
  * POST /api/evaluations — ejecuta una evaluación de un documento con una matriz.
- * Cuerpo: { document_id: string, template_id: number }
+ * Cuerpo: `{ document_id, template_id }`.
  *
- * El puntaje pondera cada criterio de la matriz. Esta versión no incorpora
- * todavía el motor de análisis: asigna una calificación determinista derivada
- * del identificador del documento para que el flujo sea reproducible.
+ * ADVERTENCIA — motor provisional. Este motor **no lee el texto del documento**:
+ * deriva un puntaje determinista del identificador, de modo que el flujo
+ * completo (ejecutar → resultado por criterio → estado del documento) quede
+ * ejercitado y verificable mientras se construye el motor de análisis real.
+ * Cada evaluación queda marcada con `engine = 'deterministic'` y por eso no
+ * emite hallazgos: un hallazgo sin evidencia real sería peor que ninguno.
  */
 export async function POST(request: Request) {
   let body: { document_id?: unknown; template_id?: unknown };
@@ -55,10 +59,7 @@ export async function POST(request: Request) {
   const templateId = Number(body.template_id);
 
   if (!documentId || !Number.isInteger(templateId)) {
-    return NextResponse.json(
-      { error: 'Se requieren `document_id` y `template_id`.' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'Se requieren `document_id` y `template_id`.' }, { status: 400 });
   }
 
   const db = getDb();
@@ -68,9 +69,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'El documento no existe.' }, { status: 404 });
   }
 
-  const criteria = queryAll<CriterionRecord>(
+  const criteria = queryAll<CriterionRecord & { id: number; scale_max: number }>(
     db,
-    'SELECT dimension, description, weight FROM criteria WHERE template_id = ? ORDER BY position, id',
+    `SELECT id, dimension, description, weight, scale_max
+     FROM criteria WHERE template_id = ? ORDER BY position, id`,
     templateId,
   );
 
@@ -78,7 +80,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'La matriz no existe o no tiene criterios.' }, { status: 404 });
   }
 
-  const score = computeScore(documentId, criteria);
+  const resultados = criteria.map((criterio) => {
+    const rawScore = puntajeDeterminista(documentId, criterio.id, criterio.scale_max);
+    return {
+      criterionId: criterio.id,
+      dimension: criterio.dimension,
+      rawScore,
+      result: resultadoDe(rawScore, criterio.scale_max),
+      // Aporte del criterio al puntaje final, ya ponderado sobre 100.
+      weightedScore: (rawScore / criterio.scale_max) * criterio.weight,
+    };
+  });
+
+  const pesoTotal = criteria.reduce((acc, criterio) => acc + criterio.weight, 0) || 100;
+  const score = Math.round(
+    (resultados.reduce((acc, r) => acc + r.weightedScore, 0) / pesoTotal) * 100,
+  );
+
   const severity = score >= 85 ? 'low' : score >= 75 ? 'medium' : 'high';
   const status = score >= 85 ? 'compliant' : score >= 75 ? 'in_review' : 'observed';
 
@@ -87,9 +105,27 @@ export async function POST(request: Request) {
 
   inTransaction(db, () => {
     db.prepare(
-      `INSERT INTO evaluations (id, document_id, template_id, score, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO evaluations (id, document_id, template_id, score, status, created_at, engine)
+       VALUES (?, ?, ?, ?, ?, ?, 'deterministic')`,
     ).run(evaluationId, documentId, templateId, score, status, now);
+
+    const insertResult = db.prepare(
+      `INSERT INTO evaluation_results
+         (evaluation_id, criterion_id, dimension, result, raw_score, weighted_score, comment)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+
+    for (const resultado of resultados) {
+      insertResult.run(
+        evaluationId,
+        resultado.criterionId,
+        resultado.dimension,
+        resultado.result,
+        resultado.rawScore,
+        resultado.weightedScore,
+        'Puntaje provisional: el motor determinista no analiza el contenido del documento.',
+      );
+    }
 
     db.prepare(
       'UPDATE documents SET status = ?, quality_score = ?, severity = ?, updated_at = ? WHERE id = ?',
@@ -104,21 +140,29 @@ export async function POST(request: Request) {
         template_id: templateId,
         score,
         status,
+        engine: 'deterministic',
       },
+      results: resultados,
     },
     { status: 201 },
   );
 }
 
-/** Puntaje ponderado determinista: el mismo documento y matriz dan siempre el mismo resultado. */
-function computeScore(documentId: string, criteria: CriterionRecord[]): number {
-  const seed = [...documentId].reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 100_003, 7);
-  const totalWeight = criteria.reduce((acc, criterion) => acc + criterion.weight, 0) || 100;
+/** Puntaje reproducible en la escala del criterio: mismo documento y criterio, mismo valor. */
+function puntajeDeterminista(documentId: string, criterionId: number, scaleMax: number): number {
+  const base = [...documentId].reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 100_003, 7);
+  // El criterio se mezcla al final: hacerlo al inicio lo diluye en el recorrido
+  // de la cadena y todos los criterios acaban con el mismo puntaje.
+  const semilla = (base * 31 + criterionId * 7919) % 100_003;
 
-  const weighted = criteria.reduce((acc, criterion, index) => {
-    const dimensionScore = 70 + ((seed >> index) % 30);
-    return acc + dimensionScore * criterion.weight;
-  }, 0);
+  // Se reparte entre 3 y scaleMax para no simular documentos catastróficos.
+  return 3 + (semilla % Math.max(1, scaleMax - 2));
+}
 
-  return Math.round(weighted / totalWeight);
+/** Traduce un puntaje ordinal al resultado cualitativo correspondiente. */
+function resultadoDe(rawScore: number, scaleMax: number): CriterionOutcome {
+  const proporcion = rawScore / scaleMax;
+  if (proporcion >= 0.9) return 'cumple';
+  if (proporcion >= 0.6) return 'parcial';
+  return 'no_cumple';
 }
