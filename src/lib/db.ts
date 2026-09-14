@@ -182,6 +182,8 @@ function createSchema(db: DatabaseSync): void {
       compared_id   TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       -- Índice de Jaccard sobre los n-gramas de ambos textos, de 0 a 1.
       similarity    REAL NOT NULL,
+      -- Proporción del documento más pequeño que aparece en el otro, de 0 a 1.
+      containment   REAL NOT NULL DEFAULT 0,
       -- 'version_previa' | 'reutilizacion' | 'similitud_inusual'
       kind          TEXT NOT NULL,
       -- Fragmentos coincidentes, en JSON.
@@ -232,6 +234,8 @@ function migrateSchema(db: DatabaseSync): void {
     ['validated_at', 'INTEGER'],
     ['validation_note', 'TEXT'],
   ]);
+
+  addMissingColumns(db, 'document_similarities', [['containment', 'REAL NOT NULL DEFAULT 0']]);
 
   addMissingColumns(db, 'norms', [
     ['article', 'TEXT'],

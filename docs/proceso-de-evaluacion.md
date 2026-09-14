@@ -11,8 +11,8 @@ etapa. Es la referencia para saber qué está construido y qué no.
 | 2. Definición de matriz de criterios | El evaluador selecciona o configura criterios, pesos, escalas y reglas. | 🟢 Operativo — cinco matrices precargadas, escala 1–5, indicadores por criterio |
 | 3. Extracción y estructuración | Obtiene texto y lo segmenta en secciones numeradas. | 🟡 Parcial — texto y secciones sí; faltan tablas, citas, fechas, responsables y anexos como entidades propias |
 | 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🔴 Motor provisional — la estructura de resultados existe, pero el motor **no lee el documento** |
-| 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🔴 No implementada |
-| 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🔴 No implementada — la tabla existe, sin motor |
+| 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🟢 Operativa — reconoce las citas, las verifica y emite hallazgos con evidencia |
+| 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🟢 Operativa — Jaccard y contención sobre shingles, con fragmentos coincidentes |
 | 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🔴 No implementada — el esquema ya prevé `validated_by` y el estado de cada hallazgo |
 
 ## Las cinco dimensiones
@@ -61,8 +61,8 @@ Se instalan en la primera ejecución, definidas en `src/lib/rubric.ts`:
 
 ## Estructura de un hallazgo
 
-La tabla `findings` recoge los ocho elementos del proceso. Ningún motor escribe
-hallazgos todavía; la estructura está lista para las etapas 4, 5 y 6.
+La tabla `findings` recoge los ocho elementos del proceso. Las etapas 5 y 6 ya
+escriben hallazgos; la etapa 4 todavía no.
 
 | Campo | Columna |
 |---|---|
@@ -78,6 +78,62 @@ hallazgos todavía; la estructura está lista para las etapas 4, 5 y 6.
 
 `source` distingue de dónde nació el hallazgo: `evaluacion` (etapa 4),
 `normativa` (etapa 5) o `similitud` (etapa 6).
+
+## Etapa 5 — validación legal y normativa
+
+`POST /api/documents/[id]/contraste` reconoce las citas normativas del texto por
+coincidencia de patrones y las contrasta contra el catálogo. **No usa modelos de
+lenguaje**: corre entera dentro del perímetro de la entidad.
+
+El reconocimiento separa el tipo del número y normaliza ambos, de modo que
+«Ley N° 29763», «Ley N.º 29763» y «Ley 29763» se resuelvan a la misma norma.
+Cubre leyes, decretos supremos, decretos legislativos, decretos de urgencia,
+resoluciones (ministeriales, de secretaría general, directorales, jefaturales,
+ejecutivas) y directivas, con las abreviaturas de uso corriente. El campo
+`norms.aliases` recoge formas alternativas de citar una misma norma.
+
+Dos detalles que el texto de un PDF impone: las citas se parten entre renglones
+(«Ley» al final de uno y «N° 30225» al comienzo del siguiente) y los
+correlativos se cortan con guion («004-2019-» / «JUS»). La búsqueda se hace
+sobre una copia con los saltos convertidos en espacios —sustitución carácter por
+carácter, así los índices siguen valiendo sobre el original— y el patrón del
+número tolera un espacio tras el guion.
+
+Hallazgos que emite:
+
+| Situación | Riesgo | Por qué |
+|---|---|---|
+| La norma citada no figura en el catálogo | Bajo | Lo más probable es que falte incorporarla, no que la cita sea errónea |
+| La norma citada no figura como vigente | Alto | El sustento legal puede haber decaído |
+
+Una norma citada veinte veces produce un hallazgo, no veinte; el mensaje indica
+cuántas veces aparece.
+
+## Etapa 6 — comparación con el repositorio
+
+Usa *shingling*: el texto se corta en secuencias solapadas de cinco palabras y se
+comparan los conjuntos resultantes. Tampoco usa modelos de lenguaje.
+
+Se calculan **dos** medidas, y basta con que una supere su umbral:
+
+| Medida | Fórmula | Umbral | Qué detecta |
+|---|---|---:|---|
+| Jaccard | intersección / unión | 0.15 | Documentos gemelos y versiones del mismo texto |
+| Contención | intersección / conjunto menor | 0.30 | Reutilización parcial |
+
+La contención es indispensable. El Jaccard penaliza la diferencia de tamaño: un
+TDR breve reproducido dentro de un documento extenso da un índice bajísimo
+aunque esté copiado entero. En la prueba real, un documento con 6 000 caracteres
+tomados de una directiva de 50 páginas dio **Jaccard 0.07 y contención 0.96**: el
+Jaccard por sí solo lo habría descartado.
+
+La coincidencia se clasifica como versión previa (títulos parecidos y Jaccard
+alto), similitud inusual o reutilización. El hallazgo incluye los fragmentos
+textuales compartidos más largos como evidencia.
+
+El resumen informa **todas** las comparaciones con sus dos índices, no solo las
+que superan el umbral: saber que un documento se comparó y quedó en 2% es tan
+útil como el aviso.
 
 ## Sobre el motor provisional
 

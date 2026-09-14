@@ -97,6 +97,12 @@ export const ENGINE_LABEL: Record<EvaluationEngine, string> = {
 /** Origen de un hallazgo. */
 export type FindingSource = 'evaluacion' | 'normativa' | 'similitud';
 
+export const SOURCE_LABEL: Record<FindingSource, string> = {
+  evaluacion: 'Evaluación de criterios',
+  normativa: 'Validación normativa',
+  similitud: 'Coincidencia con el repositorio',
+};
+
 /** Estado de atención de un hallazgo. */
 export type FindingStatus = 'pendiente' | 'aceptado' | 'descartado' | 'subsanado';
 
@@ -182,6 +188,7 @@ export interface SimilarityRecord {
   document_id: string;
   compared_id: string;
   similarity: number;
+  containment: number;
   kind: string;
   fragments: string | null;
   computed_at: number;

@@ -16,8 +16,8 @@ repositorio e informe— sobre cinco dimensiones ponderadas y una escala de 1 a 
 Qué está construido y qué no, etapa por etapa, está en
 [`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
-**Estado actual:** las etapas 1 a 3 funcionan; la 4 tiene un motor provisional
-que no analiza el contenido; las etapas 5, 6 y 7 no están implementadas.
+**Estado actual:** las etapas 1 a 3, 5 y 6 funcionan; la 4 tiene un motor
+provisional que no analiza el contenido; la 7 no está implementada.
 
 ## Origen
 
@@ -54,7 +54,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos. Los valores son de demostración (ver `src/lib/demo.ts`). |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Ejecuta evaluaciones y guarda el resultado de cada criterio. El motor es provisional: no analiza el contenido. |
-| **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. |
+| **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. Es lo que sustenta la validación de citas. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
 
@@ -70,6 +70,7 @@ Todas las rutas responden JSON.
 | `GET /api/documents/[id]/texto` | Texto extraído completo, aparte para no cargarlo en cada apertura de la ficha. |
 | `DELETE /api/documents/[id]` | Elimina el documento, su texto y el archivo original. |
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
+| `POST /api/documents/[id]/contraste` | Ejecuta las etapas 5 y 6 y emite hallazgos. Cuerpo opcional: `{ etapas: ['normativa', 'similitud'] }`. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
 | `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id }`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
@@ -126,6 +127,7 @@ src/
       documents/route.ts              GET, POST (carga de archivo)
       documents/[id]/route.ts         GET, DELETE
       documents/[id]/texto/route.ts   GET (texto extraído completo)
+      documents/[id]/contraste/route.ts POST (etapas 5 y 6)
       documents/[id]/archivo/route.ts GET (archivo original)
       evaluations/route.ts            GET, POST (ejecutar evaluación)
       evaluations/templates/route.ts  POST (crear matriz)
@@ -137,6 +139,8 @@ src/
     almacen.ts  Guardado y lectura de los archivos originales
     extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
     segmentacion.ts Corte del texto en secciones numeradas
+    citas.ts    Reconocimiento de citas normativas (etapa 5)
+    similitud.ts Shingling, Jaccard y contención (etapa 6)
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
     rubric.ts   Matrices por tipo documental, escala y normas prioritarias
@@ -161,12 +165,10 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
 - **Etapa 4** — motor de análisis real: evaluar el texto extraído contra cada
   criterio y emitir hallazgos con evidencia citada. Hoy el puntaje es
   determinista, no analítico.
-- **Etapa 5** — validación normativa: reconocer las citas del documento y
-  contrastarlas contra el catálogo (vigencia, artículo, pertinencia).
-- **Etapa 6** — comparación con el repositorio: similitud documental, versiones
-  previas y cláusulas repetidas.
 - **Etapa 7** — informe consolidado, validación humana de cada hallazgo y
   exportación.
+- Verificación del artículo citado dentro de una norma: hoy se valida la norma,
+  no el artículo. Requiere incorporar el texto de las normas al catálogo.
 - Metadatos de la etapa 1: autor, unidad responsable, fecha propia del documento,
   versionado y carga múltiple.
 - OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».

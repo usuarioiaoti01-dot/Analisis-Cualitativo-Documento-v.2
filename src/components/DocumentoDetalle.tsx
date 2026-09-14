@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Loader2, ScanSearch } from 'lucide-react';
 import {
   ENGINE_LABEL,
   EXTRACTION_LABEL,
   OUTCOME_LABEL,
   RISK_LABEL,
+  SOURCE_LABEL,
   STATUS_LABEL,
   type CriterionOutcome,
   type DocumentDetail,
@@ -14,6 +15,7 @@ import {
   type EvaluationResultRecord,
   type ExtractionStatus,
   type FindingRecord,
+  type FindingSource,
   type Risk,
   type SectionRecord,
 } from '@/lib/types';
@@ -61,6 +63,9 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
   const [pestana, setPestana] = useState<Pestana>('secciones');
   const [texto, setTexto] = useState<string | null>(null);
   const [textoCargando, setTextoCargando] = useState(false);
+  const [contrastando, setContrastando] = useState(false);
+  const [avisoContraste, setAvisoContraste] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +92,36 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
     return () => {
       cancelled = true;
     };
-  }, [documentId]);
+  }, [documentId, recarga]);
+
+  /** Etapas 5 y 6: validación normativa y comparación con el repositorio. */
+  async function ejecutarContraste() {
+    setContrastando(true);
+    setAvisoContraste(null);
+    try {
+      const response = await fetch(`/api/documents/${documentId}/contraste`, { method: 'POST' });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setAvisoContraste(payload.error ?? 'No fue posible ejecutar el contraste.');
+        return;
+      }
+
+      const normativa = payload.resumen?.normativa;
+      const similitud = payload.resumen?.similitud;
+      setAvisoContraste(
+        `${payload.hallazgos} hallazgo(s). ` +
+          `Citas normativas: ${normativa?.citas_detectadas ?? 0} detectadas, ` +
+          `${normativa?.verificadas ?? 0} verificadas contra el catálogo. ` +
+          `Repositorio: ${similitud?.coincidencias ?? 0} coincidencia(s) en ` +
+          `${similitud?.documentos_comparados ?? 0} documento(s).`,
+      );
+      setPestana('hallazgos');
+      setRecarga((valor) => valor + 1);
+    } finally {
+      setContrastando(false);
+    }
+  }
 
   // El texto completo pesa cientos de kilobytes: se pide solo al abrir su pestaña.
   useEffect(() => {
@@ -180,6 +214,22 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
             </div>
           </div>
 
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={ejecutarContraste}
+              disabled={contrastando || document.extraction_status !== 'ok'}
+              title={
+                document.extraction_status === 'ok'
+                  ? 'Valida las citas normativas y compara el documento con el repositorio'
+                  : 'Requiere un documento con texto extraído'
+              }
+              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ScanSearch className="size-[18px]" aria-hidden />
+              {contrastando ? 'Contrastando…' : 'Ejecutar contraste'}
+            </button>
+
           {document.file_name && (
             <a
               href={`/api/documents/${document.id}/archivo`}
@@ -191,7 +241,12 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
               Ver original
             </a>
           )}
+          </div>
         </div>
+
+        {avisoContraste && (
+          <p className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{avisoContraste}</p>
+        )}
 
         <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-hairline pt-5 lg:grid-cols-4">
           {metadatos.map((dato) => (
@@ -350,19 +405,32 @@ function Resultados({
   );
 }
 
+const SOURCE_TONE: Record<FindingSource, string> = {
+  evaluacion: 'bg-blue-50 text-blue-700',
+  normativa: 'bg-violet-50 text-violet-700',
+  similitud: 'bg-amber-50 text-amber-700',
+};
+
+/** Orden de presentación: primero lo más grave. */
+const ORDEN_RIESGO: Record<Risk, number> = { critico: 0, alto: 1, medio: 2, bajo: 3 };
+
 function Hallazgos({ findings }: { findings: FindingRecord[] }) {
   if (findings.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-ink-muted">
-        Sin hallazgos registrados. El motor determinista no los emite: se producirán con la
-        validación normativa, la comparación con el repositorio y el análisis de contenido.
+        Sin hallazgos registrados. Use «Ejecutar contraste» para validar las citas normativas y
+        comparar el documento con el repositorio.
       </p>
     );
   }
 
+  const ordenados = [...findings].sort(
+    (a, b) => ORDEN_RIESGO[a.risk] - ORDEN_RIESGO[b.risk],
+  );
+
   return (
     <ul className="divide-y divide-hairline">
-      {findings.map((finding) => (
+      {ordenados.map((finding) => (
         <li key={finding.id} className="py-4">
           <div className="flex items-start gap-4">
             <span
@@ -371,8 +439,15 @@ function Hallazgos({ findings }: { findings: FindingRecord[] }) {
               {RISK_LABEL[finding.risk]}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-ink-muted">{finding.dimension}</p>
-              <p className="font-medium text-ink">{finding.message}</p>
+              <p className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                <span
+                  className={`rounded px-1.5 py-0.5 font-medium ${SOURCE_TONE[finding.source]}`}
+                >
+                  {SOURCE_LABEL[finding.source]}
+                </span>
+                {finding.dimension}
+              </p>
+              <p className="mt-1 font-medium text-ink">{finding.message}</p>
 
               {finding.evidence_text && (
                 <blockquote className="mt-2 border-l-2 border-hairline pl-3 text-sm text-ink-muted italic">
