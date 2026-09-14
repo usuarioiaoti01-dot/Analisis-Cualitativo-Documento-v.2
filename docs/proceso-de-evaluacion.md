@@ -178,10 +178,12 @@ Ese código compuesto **contiene** una cita pero **no es** esa norma, así que
 norma. Sin esa regla, un documento que citara la Ley 32069 habría quedado
 emparejado con su fe de erratas.
 
-**Límite conocido:** un extracto cuyas primeras páginas reproducen el texto de
-la norma —«Modificaciones (Parte 1) – Reglamento de la Ley 32069»— se identifica
-como la norma misma y se rechaza por duplicado. El informe de carga lo dice, así
-que no se pierde en silencio, pero hay que incorporarlo a mano.
+Un extracto cuyas primeras páginas reproducen el texto de la norma se identifica
+como la norma misma, y ni el nombre del archivo disuade al modelo. Se resuelve
+donde se detecta la colisión: si el nombre declara ser una fe de erratas, una
+modificatoria, un anexo o una parte, el documento se incorpora como complemento
+de la norma con la que chocó en lugar de rechazarse. «Parte 1» y «Parte 2»
+conservan su número, y un código compuesto repetido recibe un sufijo.
 
 Los duplicados se detectan por la clave normalizada, no por el texto: un archivo
 de la directiva de firma digital se reconoció como ya presente en el catálogo
@@ -337,6 +339,12 @@ no prueba quién lo escribió. Incorporar el inicio de sesión es sustituir ese
 módulo.
 
 ## Matrices: modificación y eliminación
+
+Las cinco matrices de ejemplo se instalan **una sola vez**. Antes la carga
+inicial se ejecutaba siempre que la tabla estuviera vacía, de modo que quien las
+borraba todas las veía reaparecer en el siguiente arranque. Una marca en
+`app_meta` deja constancia de que ya se instalaron: son una ayuda para empezar,
+no un contenido que el sistema deba imponer.
 
 Una matriz que ya se usó no puede tratarse como un borrador.
 

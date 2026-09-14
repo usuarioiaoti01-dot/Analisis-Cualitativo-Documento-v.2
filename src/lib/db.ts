@@ -75,6 +75,14 @@ function createSchema(db: DatabaseSync): void {
       char_end    INTEGER NOT NULL
     );
 
+    -- Marcas de lo que ya se hizo una vez y no debe repetirse, como la carga
+    -- inicial de matrices. Sin esto, borrarlas todas las resucitaba en el
+    -- siguiente arranque.
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- Etapa 2: matriz de evaluación parametrizable.
     CREATE TABLE IF NOT EXISTS templates (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,

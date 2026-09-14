@@ -52,6 +52,44 @@ export async function POST(request: Request) {
   return NextResponse.json({ resultados, incorporadas }, { status: incorporadas > 0 ? 201 : 200 });
 }
 
+/**
+ * Marcas en el nombre del archivo que indican que el documento acompaña a una
+ * norma en lugar de serlo. Solo se consultan cuando ya hubo colisión: un
+ * nombre que diga «modificatoria» no impide que un documento con código propio
+ * se incorpore con él.
+ */
+const MARCAS_COMPLEMENTO: [RegExp, string][] = [
+  [/fe\s*de\s*h?erratas/i, 'Fe de erratas'],
+  [/modificaci|modificatoria/i, 'Modificatoria'],
+  [/anexo/i, 'Anexo'],
+  [/extracto|compendio|parte[\s_-]*\d/i, 'Extracto'],
+];
+
+function complementoSegunNombre(fileName: string): string | null {
+  const nombre = fileName.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const marca = MARCAS_COMPLEMENTO.find(([patron]) => patron.test(nombre));
+  if (!marca) return null;
+
+  // «Parte 1» y «Parte 2» del mismo cuerpo son documentos distintos.
+  // Los nombres de archivo separan con guion bajo tan a menudo como con espacio.
+  const parte = nombre.match(/parte[\s_-]*(\d+)/i);
+  return parte ? `${marca[1]} (Parte ${parte[1]})` : marca[1];
+}
+
+/** Añade un sufijo si el código compuesto ya existe, para no colisionar. */
+function codigoLibre(db: ReturnType<typeof getDb>, propuesto: string): string {
+  const existe = (code: string) =>
+    Boolean(queryOne<{ id: number }>(db, 'SELECT id FROM norms WHERE code = ?', code));
+
+  if (!existe(propuesto)) return propuesto;
+
+  for (let sufijo = 2; sufijo < 50; sufijo += 1) {
+    const candidato = `${propuesto} (${sufijo})`;
+    if (!existe(candidato)) return candidato;
+  }
+  return `${propuesto} (${Date.now()})`;
+}
+
 async function incorporar(
   db: ReturnType<typeof getDb>,
   archivo: File,
@@ -119,13 +157,26 @@ async function incorporar(
         ? clavesDeNorma(norma.code, norma.aliases).some((clave) => claves.has(clave))
         : norma.code.trim().toLowerCase() === metadatos.code.trim().toLowerCase();
 
-    if (coincide) {
+    if (!coincide) continue;
+
+    // Colisión con una norma ya presente. Antes se descartaba sin más, y con
+    // ello se perdían los extractos cuyas primeras páginas reproducen el texto
+    // de la norma —«Modificaciones (Parte 1) – Reglamento de la Ley 32069»—,
+    // que el modelo identifica como la norma misma. El nombre del archivo dice
+    // lo que el contenido no: si declara ser un complemento, se incorpora como
+    // tal en lugar de rechazarse.
+    const complemento = complementoSegunNombre(archivo.name);
+    if (!complemento) {
       return {
         ...base,
         estado: 'duplicada',
         detalle: `Ya estaba en el catálogo como «${norma.code}».`,
       };
     }
+
+    metadatos.code = codigoLibre(db, `${complemento} de ${norma.code}`);
+    metadatos.requiereRevision = true;
+    break;
   }
 
   const storagePath = await guardarArchivo(`norma-${randomUUID()}`, formato, buffer);

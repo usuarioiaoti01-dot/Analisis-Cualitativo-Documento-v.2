@@ -24,7 +24,7 @@ const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
 const ACEPTADOS = '.pdf,.docx,.xlsx';
 
 /** Normas por página. Un catálogo de decenas de normas no se navega en una lista única. */
-const POR_PAGINA = 12;
+const POR_PAGINA = 10;
 
 const ESTADO_ETIQUETA: Record<ResultadoIncorporacion['estado'], string> = {
   incorporada: 'incorporada(s)',

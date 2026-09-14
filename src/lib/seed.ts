@@ -2,13 +2,36 @@ import type { DatabaseSync } from 'node:sqlite';
 import { inTransaction, queryOne } from './sqlite';
 import { MATRICES_POR_TIPO, PRIORITY_NORMS } from './rubric';
 
+/** Marca que deja constancia de que las matrices iniciales ya se instalaron. */
+const MARCA_MATRICES = 'matrices_iniciales_instaladas';
+
 /**
- * Carga inicial idempotente: solo se ejecuta cuando la tabla `templates` está
- * vacía, de modo que reiniciar el servidor no duplica ni pisa datos reales.
+ * Carga inicial: instala las matrices de ejemplo una única vez.
+ *
+ * Antes se ejecutaba siempre que la tabla estuviera vacía, de modo que quien
+ * borraba todas las matrices las veía reaparecer en el siguiente arranque. Se
+ * deja una marca: las matrices son una ayuda para empezar, no un contenido que
+ * el sistema deba imponer.
  */
 export function seedDatabase(db: DatabaseSync): void {
-  const row = queryOne<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM templates');
-  if ((row?.total ?? 0) > 0) return;
+  const marca = queryOne<{ value: string }>(
+    db,
+    'SELECT value FROM app_meta WHERE key = ?',
+    MARCA_MATRICES,
+  );
+  if (marca) return;
+
+  const existentes = queryOne<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM templates');
+
+  // Base anterior a esta marca que ya tiene matrices: se anota la marca sin
+  // volver a instalarlas, para que borrarlas a partir de ahora sí se respete.
+  if ((existentes?.total ?? 0) > 0) {
+    db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(
+      MARCA_MATRICES,
+      String(Date.now()),
+    );
+    return;
+  }
 
   const now = Date.now();
 
@@ -38,6 +61,8 @@ export function seedDatabase(db: DatabaseSync): void {
         );
       });
     }
+
+    db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(MARCA_MATRICES, String(now));
   });
 }
 
