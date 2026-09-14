@@ -16,8 +16,7 @@ repositorio e informe— sobre cinco dimensiones ponderadas y una escala de 1 a 
 Qué está construido y qué no, etapa por etapa, está en
 [`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
-**Estado actual:** las etapas 1 a 3, 5 y 6 funcionan; la 4 tiene un motor
-provisional que no analiza el contenido; la 7 no está implementada.
+**Estado actual:** las etapas 1 a 6 funcionan; la 7 no está implementada.
 
 ## Origen
 
@@ -30,7 +29,9 @@ se completó y qué falta está en
 ## Cómo levantarlo
 
 Requiere **Node 22.5 o superior** (usa el SQLite integrado de Node, `node:sqlite`;
-no hay dependencias nativas que compilar).
+no hay dependencias nativas que compilar) y, para el motor de análisis, una
+credencial de la API de Anthropic en `ANTHROPIC_API_KEY`. Sin ella todo lo demás
+funciona: solo queda deshabilitada la evaluación de contenido.
 
 ```bash
 npm install
@@ -46,6 +47,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | `npm run build` | Compilación de producción |
 | `npm start` | Sirve la compilación de producción |
 | `npm run typecheck` | Verificación de tipos sin emitir |
+| `npm test` | Pruebas del verificador de evidencia |
 
 ## Módulos
 
@@ -53,7 +55,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 |---|---|
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos. Los valores son de demostración (ver `src/lib/demo.ts`). |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
-| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Ejecuta evaluaciones y guarda el resultado de cada criterio. El motor es provisional: no analiza el contenido. |
+| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
 | **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. Es lo que sustenta la validación de citas. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
@@ -72,24 +74,29 @@ Todas las rutas responden JSON.
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `POST /api/documents/[id]/contraste` | Ejecuta las etapas 5 y 6 y emite hallazgos. Cuerpo opcional: `{ etapas: ['normativa', 'similitud'] }`. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
-| `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id }`. |
+| `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id, engine }`, donde `engine` es `ai` (por omisión) o `deterministic`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
 | `GET /api/catalog` | Normas del catálogo. |
 | `POST /api/catalog` | Incorpora las referencias prioritarias del inventario interno. |
 
-### Cálculo del puntaje
+### El motor de análisis
 
-`POST /api/evaluations` **no analiza el contenido del documento**. Puntúa cada
-criterio de forma determinista a partir del identificador del documento y del
-criterio, de modo que el flujo completo —ejecutar, guardar el resultado de cada
-criterio, actualizar el estado del documento— quede ejercitado y verificable
-mientras se construye el motor real.
+Con `engine: 'ai'` (por omisión) el motor envía el documento y la matriz a la API
+de Anthropic y obtiene un resultado por criterio con sus hallazgos. Requiere
+`ANTHROPIC_API_KEY`; sin ella la ruta responde 503 y la interfaz deshabilita la
+opción.
 
-Cada evaluación se marca con `engine = 'deterministic'`, la interfaz lo advierte,
-y por la misma razón el motor **no emite hallazgos**: un hallazgo con evidencia
-inventada sería peor que ninguno.
+**Toda cita que devuelve el motor se verifica literalmente contra el documento
+antes de guardarse.** La que no aparece se descarta junto con su hallazgo, y la
+respuesta informa cuántos se descartaron. Es lo que impide que una cita inventada
+llegue al informe.
 
-El aporte de un criterio es `(puntaje / escala) × peso`. El umbral de estados:
+Con `engine: 'deterministic'` el puntaje se deriva del identificador del documento
+sin leer el contenido, y no se emiten hallazgos. Sirve para ejercitar el flujo sin
+consumir la API.
+
+El aporte de un criterio es `(puntaje / escala) × peso`; los criterios
+`no_aplica` salen del denominador. El umbral de estados:
 
 | Puntaje | Severidad | Estado |
 |---|---|---|
@@ -97,8 +104,8 @@ El aporte de un criterio es `(puntaje / escala) × peso`. El umbral de estados:
 | 75 – 84 | Medio | En revisión |
 | < 75 | Alto | Observado |
 
-Sustituir `puntajeDeterminista` en `src/app/api/evaluations/route.ts` por el
-motor real es el siguiente paso; el resto del flujo no necesita cambios.
+El detalle del motor, sus decisiones y la verificación de evidencia están en
+[`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
 ## Carga y extracción de texto
 
@@ -141,6 +148,8 @@ src/
     segmentacion.ts Corte del texto en secciones numeradas
     citas.ts    Reconocimiento de citas normativas (etapa 5)
     similitud.ts Shingling, Jaccard y contención (etapa 6)
+    motor-ia.ts Evaluación del contenido con Claude (etapa 4)
+    evidencia.ts Verificación literal de las citas del motor
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
     rubric.ts   Matrices por tipo documental, escala y normas prioritarias
@@ -167,6 +176,9 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
   determinista, no analítico.
 - **Etapa 7** — informe consolidado, validación humana de cada hallazgo y
   exportación.
+- El motor de análisis está construido y verificado en todo lo que no requiere
+  credencial, pero **no se ha ejecutado contra la API real**: falta una corrida
+  con `ANTHROPIC_API_KEY` configurada.
 - Verificación del artículo citado dentro de una norma: hoy se valida la norma,
   no el artículo. Requiere incorporar el texto de las normas al catálogo.
 - Metadatos de la etapa 1: autor, unidad responsable, fecha propia del documento,

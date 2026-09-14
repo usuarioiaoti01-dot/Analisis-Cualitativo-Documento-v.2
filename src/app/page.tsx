@@ -5,7 +5,7 @@ import { CargarDocumentoModal } from '@/components/CargarDocumentoModal';
 import { CatalogoView } from '@/components/CatalogoView';
 import { DocumentoDetalle } from '@/components/DocumentoDetalle';
 import { DocumentosView } from '@/components/DocumentosView';
-import { EvaluacionesView } from '@/components/EvaluacionesView';
+import { EvaluacionesView, type Motor } from '@/components/EvaluacionesView';
 import { ModuloPendiente } from '@/components/ModuloPendiente';
 import { NuevaMatrizModal } from '@/components/NuevaMatrizModal';
 import { ResumenView } from '@/components/ResumenView';
@@ -42,6 +42,7 @@ export default function Page() {
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [evaluationDocuments, setEvaluationDocuments] = useState<{ id: string; title: string }[]>([]);
   const [norms, setNorms] = useState<NormRecord[]>([]);
+  const [motor, setMotor] = useState<{ ia_disponible: boolean; modelo: string } | null>(null);
 
   const loadDocuments = useCallback(async () => {
     setDocumentsLoading(true);
@@ -57,9 +58,11 @@ export default function Page() {
     const data = await request<{
       documents: { id: string; title: string }[];
       templates: TemplateRecord[];
+      motor: { ia_disponible: boolean; modelo: string };
     }>('/api/evaluations');
     setEvaluationDocuments(data.documents);
     setTemplates(data.templates);
+    setMotor(data.motor);
   }, []);
 
   const loadCatalog = useCallback(async () => {
@@ -90,12 +93,29 @@ export default function Page() {
     setOpenDocumentId(document.id);
   }
 
-  async function runEvaluation(documentId: string, templateId: number) {
-    await request('/api/evaluations', {
+  /** Devuelve el resumen de la ejecución para mostrarlo en la vista. */
+  async function runEvaluation(documentId: string, templateId: number, engine: Motor) {
+    const data = await request<{
+      evaluation: { score: number | null; engine: string };
+      resumen: { criterios: number; hallazgos: number; citas_descartadas: number };
+    }>('/api/evaluations', {
       method: 'POST',
-      body: JSON.stringify({ document_id: documentId, template_id: templateId }),
+      body: JSON.stringify({ document_id: documentId, template_id: templateId, engine }),
     });
+
     await loadDocuments();
+
+    const { evaluation, resumen } = data;
+    const partes = [
+      `Puntaje ${evaluation.score ?? '—'}/100 sobre ${resumen.criterios} criterios.`,
+      `${resumen.hallazgos} hallazgo(s) con evidencia verificada.`,
+    ];
+    if (resumen.citas_descartadas > 0) {
+      partes.push(
+        `${resumen.citas_descartadas} hallazgo(s) se descartaron porque su cita no se encontró en el documento.`,
+      );
+    }
+    return partes.join(' ');
   }
 
   async function createTemplate(payload: {
@@ -161,6 +181,7 @@ export default function Page() {
             <EvaluacionesView
               documents={evaluationDocuments}
               templates={templates}
+              motor={motor}
               onRun={runEvaluation}
               onNewTemplate={() => setMatrixOpen(true)}
             />

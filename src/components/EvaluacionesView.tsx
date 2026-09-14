@@ -1,19 +1,24 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Plus, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Play, Plus, SlidersHorizontal } from 'lucide-react';
 import type { TemplateRecord } from '@/lib/types';
+
+export type Motor = 'ai' | 'deterministic';
 
 interface EvaluacionesViewProps {
   documents: { id: string; title: string }[];
   templates: TemplateRecord[];
-  onRun: (documentId: string, templateId: number) => Promise<void>;
+  /** Estado del motor con IA, según lo informa el servidor. */
+  motor: { ia_disponible: boolean; modelo: string } | null;
+  onRun: (documentId: string, templateId: number, motor: Motor) => Promise<string>;
   onNewTemplate: () => void;
 }
 
 export function EvaluacionesView({
   documents,
   templates,
+  motor,
   onRun,
   onNewTemplate,
 }: EvaluacionesViewProps) {
@@ -21,6 +26,11 @@ export function EvaluacionesView({
   const [templateId, setTemplateId] = useState('');
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const iaDisponible = motor?.ia_disponible ?? false;
+  const [engine, setEngine] = useState<Motor>('ai');
+  const motorEfectivo: Motor = iaDisponible ? engine : 'deterministic';
 
   const canRun = documentId !== '' && templateId !== '' && !running;
 
@@ -28,11 +38,13 @@ export function EvaluacionesView({
     if (!canRun) return;
     setRunning(true);
     setMessage(null);
+    setError(null);
     try {
-      await onRun(documentId, Number(templateId));
-      setMessage('La evaluación se ejecutó y el documento actualizó su estado.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No fue posible ejecutar la evaluación.');
+      setMessage(await onRun(documentId, Number(templateId), motorEfectivo));
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : 'No fue posible ejecutar la evaluación.',
+      );
     } finally {
       setRunning(false);
     }
@@ -79,6 +91,19 @@ export function EvaluacionesView({
             </select>
           </label>
 
+          <label className="lg:w-56">
+            <span className="block text-sm font-medium text-ink">Motor</span>
+            <select
+              value={motorEfectivo}
+              onChange={(event) => setEngine(event.target.value as Motor)}
+              disabled={!iaDisponible}
+              className="mt-1.5 w-full rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand disabled:bg-canvas disabled:text-ink-muted"
+            >
+              <option value="ai">Análisis del contenido (IA)</option>
+              <option value="deterministic">Provisional (sin analizar)</option>
+            </select>
+          </label>
+
           <button
             type="button"
             onClick={handleRun}
@@ -86,11 +111,27 @@ export function EvaluacionesView({
             className="flex items-center justify-center gap-2 rounded-lg bg-brand px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="size-[18px]" aria-hidden />
-            {running ? 'Ejecutando…' : 'Iniciar'}
+            {running ? 'Evaluando…' : 'Iniciar'}
           </button>
         </div>
 
-        {message && <p className="mt-4 text-sm text-ink-muted">{message}</p>}
+        {!iaDisponible && (
+          <p className="mt-4 flex items-start gap-2 rounded-lg bg-sev-medium-bg px-4 py-3 text-sm text-sev-medium-ink">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            El motor de análisis no está configurado: falta la credencial de la API en el servidor.
+            Solo está disponible el motor provisional, que no analiza el contenido del documento.
+          </p>
+        )}
+
+        {iaDisponible && motorEfectivo === 'ai' && (
+          <p className="mt-4 text-sm text-ink-muted">
+            El análisis lee el documento completo y puede tardar varios minutos. Modelo:{' '}
+            <code className="rounded bg-canvas px-1.5 py-0.5 text-xs">{motor?.modelo}</code>.
+          </p>
+        )}
+
+        {message && <p className="mt-4 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</p>}
+        {error && <p className="mt-4 rounded-lg bg-sev-high-bg px-4 py-3 text-sm text-sev-high-ink">{error}</p>}
       </section>
 
       <section className="card p-6">

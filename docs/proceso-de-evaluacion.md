@@ -10,7 +10,7 @@ etapa. Es la referencia para saber qué está construido y qué no.
 | 1. Registro del documento | Carga el documento, identifica tipo documental, fecha y versión. | 🟡 Parcial — faltan autor, unidad responsable, fecha propia del documento, versionado y carga múltiple |
 | 2. Definición de matriz de criterios | El evaluador selecciona o configura criterios, pesos, escalas y reglas. | 🟢 Operativo — cinco matrices precargadas, escala 1–5, indicadores por criterio |
 | 3. Extracción y estructuración | Obtiene texto y lo segmenta en secciones numeradas. | 🟡 Parcial — texto y secciones sí; faltan tablas, citas, fechas, responsables y anexos como entidades propias |
-| 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🔴 Motor provisional — la estructura de resultados existe, pero el motor **no lee el documento** |
+| 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🟢 Operativa — motor con IA que lee el documento y emite hallazgos con evidencia verificada; el provisional se conserva como alternativa |
 | 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🟢 Operativa — reconoce las citas, las verifica y emite hallazgos con evidencia |
 | 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🟢 Operativa — Jaccard y contención sobre shingles, con fragmentos coincidentes |
 | 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🔴 No implementada — el esquema ya prevé `validated_by` y el estado de cada hallazgo |
@@ -61,8 +61,8 @@ Se instalan en la primera ejecución, definidas en `src/lib/rubric.ts`:
 
 ## Estructura de un hallazgo
 
-La tabla `findings` recoge los ocho elementos del proceso. Las etapas 5 y 6 ya
-escriben hallazgos; la etapa 4 todavía no.
+La tabla `findings` recoge los ocho elementos del proceso. Las tres etapas que
+producen hallazgos —4, 5 y 6— escriben en ella con la misma forma.
 
 | Campo | Columna |
 |---|---|
@@ -135,15 +135,59 @@ El resumen informa **todas** las comparaciones con sus dos índices, no solo las
 que superan el umbral: saber que un documento se comparó y quedó en 2% es tan
 útil como el aviso.
 
-## Sobre el motor provisional
+## Etapa 4 — evaluación cualitativa
 
-`POST /api/evaluations` deriva un puntaje determinista del identificador del
-documento y del criterio. **No analiza el contenido.** Existe para que el flujo
-completo quede ejercitado y verificable mientras se construye el motor real.
+`POST /api/evaluations` con `engine: 'ai'` envía el texto íntegro del documento y
+la matriz a la API de Anthropic, y obtiene un resultado por criterio con sus
+hallazgos. Es la única etapa que saca el texto del perímetro de la entidad.
 
-Cada evaluación queda marcada con `engine = 'deterministic'` y la interfaz lo
-advierte de forma visible. Por la misma razón **no emite hallazgos**: un hallazgo
-con evidencia inventada sería peor que ninguno.
+**Modelo:** `claude-opus-5` (configurable con `SACD_MODELO`), con razonamiento
+adaptativo y salida estructurada por esquema JSON, de modo que la respuesta trae
+siempre un resultado por cada `criterio_id` solicitado. El documento viaja en el
+bloque de sistema **con caché**: reevaluarlo con otra matriz no vuelve a pagar el
+documento entero.
+
+### La regla que sostiene todo: la evidencia se verifica
+
+Un hallazgo vale por su evidencia. Si la cita que lo acompaña no está en el
+documento, el hallazgo no sustenta nada, y un revisor que verifica una cita
+inexistente pierde la confianza en el informe completo.
+
+Por eso **toda cita se busca literalmente en el documento antes de guardarse**
+(`src/lib/evidencia.ts`). La búsqueda tolera diferencias de espaciado —un PDF
+parte las palabras entre renglones— y de comillas tipográficas, pero **no de
+contenido**: si el motor cambió una palabra, la cita no coincide.
+
+La cita que no aparece **se descarta junto con su hallazgo**, y la respuesta
+informa cuántos se descartaron en `resumen.citas_descartadas`. Ese contador es
+además un indicador de calidad de la corrida: si sube, algo va mal en las
+instrucciones o en el texto extraído.
+
+Lo que se guarda es el texto **del documento**, no el que devolvió el motor, y la
+ubicación se resuelve contra las secciones de la etapa 3.
+
+### Otras decisiones
+
+- Un criterio `no_aplica` sale del denominador del puntaje: castigar al documento
+  por un criterio que el propio análisis declara inaplicable distorsionaría el
+  resultado.
+- Un puntaje fuera de la escala del criterio se recorta al rango válido.
+- El documento no se trunca nunca en silencio. Si excede `SACD_MAX_TOKENS_ENTRADA`
+  la ruta responde 413 explicando el límite.
+- Los hallazgos de evaluación se reemplazan en cada corrida; los de las etapas 5
+  y 6 no se tocan.
+
+### El motor provisional sigue disponible
+
+Con `engine: 'deterministic'` el puntaje se deriva del identificador del documento
+y del criterio, sin leer el contenido. Se conserva para ejercitar el flujo sin
+consumir la API y como alternativa cuando no hay credencial configurada. No emite
+hallazgos, por la misma razón de siempre: un hallazgo sin evidencia real sería
+peor que ninguno.
+
+`GET /api/evaluations` informa en `motor.ia_disponible` si el servidor tiene
+credencial; la interfaz deshabilita el motor con IA y lo advierte cuando no la
+hay.
 
 ## Entidades
 
@@ -164,8 +208,9 @@ documento sale del perímetro de la entidad hacia la API del proveedor. El 13 de
 septiembre de 2026 se decidió permitirlo **sin restricción**, sin marca de
 documento reservado.
 
-Si esa decisión cambia, el punto de intervención es único: la ruta
-`POST /api/evaluations`. Las etapas 5 y 6 no usan modelos de lenguaje y no se
+Si esa decisión cambia, el punto de intervención es único: `src/lib/motor-ia.ts`
+es el único módulo que envía texto fuera. Las etapas 5 y 6 son coincidencia de
+patrones y comparación de conjuntos: corren enteras dentro del equipo y no se
 verían afectadas.
 
 ## La decisión final es humana
