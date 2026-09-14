@@ -48,6 +48,8 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | `npm start` | Sirve la compilación de producción |
 | `npm run typecheck` | Verificación de tipos sin emitir |
 | `npm test` | Pruebas del verificador de evidencia |
+| `npm run reset:datos` | Muestra qué datos de trabajo se borrarían |
+| `npm run reset:datos -- --si` | Vacía el repositorio documental; conserva el catálogo normativo y las matrices |
 
 ## Módulos
 

@@ -40,9 +40,16 @@ export function CatalogoView({ norms, onLoadPriority }: CatalogoViewProps) {
     <section className="card p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-ink">Catálogo normativo</h2>
+          <h2 className="text-lg font-semibold text-ink">
+            CATÁLOGO NORMATIVO DIRECCIÓN DE POLÍTICAS - SERFOR
+          </h2>
           <p className="mt-0.5 text-sm text-ink-muted">
             Repositorio interno y referencias para sustentar evaluaciones.
+          </p>
+          <p className="mt-1 text-sm text-ink-muted">
+            {norms.length === 0
+              ? 'Sin normas cargadas.'
+              : `${norms.length} ${norms.length === 1 ? 'norma cargada' : 'normas cargadas'}.`}
           </p>
         </div>
         <button
