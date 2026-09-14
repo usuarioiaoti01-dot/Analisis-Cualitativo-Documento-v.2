@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+
+/* Paleta institucional del evaluador. */
+@theme {
+  --color-sidebar: #0f2a47;
+  --color-sidebar-active: #1b3a5c;
+  --color-sidebar-muted: #7f9ab4;
+  --color-accent: #3dd9c6;
+
+  --color-canvas: #f3f7fb;
+  --color-ink: #12304f;
+  --color-ink-muted: #6b8299;
+  --color-hairline: #e6edf5;
+
+  --color-brand: #1d6fe0;
+  --color-brand-strong: #1559bd;
+
+  --color-sev-low-bg: #dcf5ec;
+  --color-sev-low-ink: #0e7a5f;
+  --color-sev-medium-bg: #fdf2dc;
+  --color-sev-medium-ink: #8a6100;
+  --color-sev-high-bg: #fde8ec;
+  --color-sev-high-ink: #b3123c;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+/* Tipografía de los rótulos de sección: versalitas espaciadas. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.875rem;
+  box-shadow: 0 1px 2px rgb(18 48 79 / 0.04);
+}
