@@ -44,14 +44,15 @@ export function seedDatabase(db: DatabaseSync): void {
 /** Incorpora las normas prioritarias al catálogo y devuelve cuántas quedaron registradas. */
 export function loadPriorityNorms(db: DatabaseSync): number {
   const insert = db.prepare(
-    `INSERT INTO norms (code, title, issuer, subject, status, aliases)
-     VALUES (?, ?, ?, ?, 'Vigente', ?)
+    `INSERT INTO norms (code, title, issuer, subject, status, aliases, created_at)
+     VALUES (?, ?, ?, ?, 'Vigente', ?, ?)
      ON CONFLICT(code) DO UPDATE SET aliases = excluded.aliases`,
   );
 
+  const now = Date.now();
   inTransaction(db, () => {
     for (const norm of PRIORITY_NORMS) {
-      insert.run(norm.code, norm.title, norm.issuer, norm.subject, norm.aliases);
+      insert.run(norm.code, norm.title, norm.issuer, norm.subject, norm.aliases, now);
     }
   });
 

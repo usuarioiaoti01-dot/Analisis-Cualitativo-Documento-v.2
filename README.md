@@ -55,7 +55,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 
 | Sección | Estado |
 |---|---|
-| **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos. Los valores son de demostración (ver `src/lib/demo.ts`). |
+| **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
 | **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. Es lo que sustenta la validación de citas. |
@@ -78,6 +78,7 @@ Todas las rutas responden JSON.
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
 | `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id, engine }`, donde `engine` es `ai` (por omisión) o `deterministic`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
+| `GET /api/summary` | Cifras del panel de resumen, agregadas sobre la base. |
 | `GET /api/catalog` | Normas del catálogo. |
 | `POST /api/catalog` | Incorpora las referencias prioritarias del inventario interno. |
 
@@ -141,6 +142,7 @@ src/
       evaluations/route.ts            GET, POST (ejecutar evaluación)
       evaluations/templates/route.ts  POST (crear matriz)
       catalog/route.ts                GET, POST
+      summary/route.ts                GET (cifras del panel)
     layout.tsx  globals.css  page.tsx
   components/                         Vistas y modales
   lib/
@@ -155,7 +157,6 @@ src/
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
     rubric.ts   Matrices por tipo documental, escala y normas prioritarias
-    demo.ts     Datos de demostración del panel de resumen
     types.ts    Tipos compartidos
     sections.ts Secciones del espacio de trabajo
 ```
@@ -188,4 +189,3 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
 - OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».
 - Autenticación y autorización. La sesión de la barra lateral es fija.
 - Los módulos «Usuarios y roles» y «Configuración» son marcadores.
-- El panel de resumen usa datos de demostración, no consultas a la base.

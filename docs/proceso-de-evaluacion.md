@@ -13,7 +13,7 @@ etapa. Es la referencia para saber qué está construido y qué no.
 | 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🟢 Operativa — motor con IA que lee el documento y emite hallazgos con evidencia verificada; el provisional se conserva como alternativa |
 | 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🟢 Operativa — reconoce las citas, las verifica y emite hallazgos con evidencia |
 | 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🟢 Operativa — Jaccard y contención sobre shingles, con fragmentos coincidentes |
-| 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🔴 No implementada — el esquema ya prevé `validated_by` y el estado de cada hallazgo |
+| 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🟡 Parcial — el panel de resumen consolida las cifras; faltan la validación humana de cada hallazgo y la exportación |
 
 ## Las cinco dimensiones
 

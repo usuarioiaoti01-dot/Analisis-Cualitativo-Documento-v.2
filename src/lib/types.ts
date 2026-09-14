@@ -238,3 +238,30 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   medium: 'Medio',
   high: 'Alto',
 };
+
+/* ── Panel de resumen ──────────────────────────────────────────────────── */
+
+/** Fila de «Documentos recientes» del panel. */
+export interface DocumentoReciente {
+  id: string;
+  title: string;
+  document_type: string;
+  updated_at: number;
+  quality_score: number | null;
+  severity: Severity | null;
+  status: DocumentStatus;
+}
+
+/** Respuesta de `GET /api/summary`. Todas las cifras salen de la base. */
+export interface Resumen {
+  metricas: {
+    documentos_evaluados: { valor: number; nuevos_este_mes: number };
+    evaluaciones_activas: { valor: number; requieren_atencion: number };
+    hallazgos_criticos: { valor: number };
+    indice_calidad: { valor: number | null; variacion: number | null };
+  };
+  documentos_recientes: DocumentoReciente[];
+  dimensiones: { dimension: string; promedio: number }[];
+  hallazgos: (FindingRecord & { document_title: string })[];
+  catalogo: { normas: number; actualizado_en: number | null };
+}

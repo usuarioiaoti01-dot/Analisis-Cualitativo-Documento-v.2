@@ -172,7 +172,9 @@ function createSchema(db: DatabaseSync): void {
       effective_from INTEGER,
       effective_to   INTEGER,
       -- Formas alternativas de citar la misma norma, separadas por '|'.
-      aliases        TEXT
+      aliases        TEXT,
+      -- Cuándo se incorporó al catálogo, para poder informar su actualización.
+      created_at     INTEGER
     );
 
     -- Etapa 6: coincidencias entre el documento evaluado y el repositorio.
@@ -244,6 +246,7 @@ function migrateSchema(db: DatabaseSync): void {
     ['effective_from', 'INTEGER'],
     ['effective_to', 'INTEGER'],
     ['aliases', 'TEXT'],
+    ['created_at', 'INTEGER'],
   ]);
 
   // `findings` cambió de forma por completo. En el esquema anterior nunca se

@@ -12,7 +12,13 @@ import { ResumenView } from '@/components/ResumenView';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { getSection, type SectionId } from '@/lib/sections';
-import type { CriterionRecord, DocumentRecord, NormRecord, TemplateRecord } from '@/lib/types';
+import type {
+  CriterionRecord,
+  DocumentRecord,
+  NormRecord,
+  Resumen,
+  TemplateRecord,
+} from '@/lib/types';
 
 /** Lanza un error legible cuando la ruta de API responde con un estado no exitoso. */
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
@@ -43,6 +49,8 @@ export default function Page() {
   const [evaluationDocuments, setEvaluationDocuments] = useState<{ id: string; title: string }[]>([]);
   const [norms, setNorms] = useState<NormRecord[]>([]);
   const [motor, setMotor] = useState<{ ia_disponible: boolean; modelo: string } | null>(null);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [resumenCargando, setResumenCargando] = useState(true);
 
   const loadDocuments = useCallback(async () => {
     setDocumentsLoading(true);
@@ -65,6 +73,15 @@ export default function Page() {
     setMotor(data.motor);
   }, []);
 
+  const loadResumen = useCallback(async () => {
+    setResumenCargando(true);
+    try {
+      setResumen(await request<Resumen>('/api/summary'));
+    } finally {
+      setResumenCargando(false);
+    }
+  }, []);
+
   const loadCatalog = useCallback(async () => {
     const data = await request<{ norms: NormRecord[] }>('/api/catalog');
     setNorms(data.norms);
@@ -74,7 +91,8 @@ export default function Page() {
     void loadDocuments();
     void loadEvaluations();
     void loadCatalog();
-  }, [loadDocuments, loadEvaluations, loadCatalog]);
+    void loadResumen();
+  }, [loadDocuments, loadEvaluations, loadCatalog, loadResumen]);
 
   /** Sube el archivo; el servidor lo almacena, extrae su texto y devuelve la ficha. */
   async function registerDocument(file: File, documentType: string) {
@@ -87,7 +105,7 @@ export default function Page() {
       body: form,
     });
 
-    await Promise.all([loadDocuments(), loadEvaluations()]);
+    await Promise.all([loadDocuments(), loadEvaluations(), loadResumen()]);
     setSection('documentos');
     // Abrir el detalle deja a la vista el texto que se acaba de extraer.
     setOpenDocumentId(document.id);
@@ -103,7 +121,7 @@ export default function Page() {
       body: JSON.stringify({ document_id: documentId, template_id: templateId, engine }),
     });
 
-    await loadDocuments();
+    await Promise.all([loadDocuments(), loadResumen()]);
 
     const { evaluation, resumen } = data;
     const partes = [
@@ -128,8 +146,11 @@ export default function Page() {
   }
 
   async function loadPriorityNorms() {
-    const data = await request<{ norms: NormRecord[]; total: number }>('/api/catalog', { method: 'POST' });
+    const data = await request<{ norms: NormRecord[]; total: number }>('/api/catalog', {
+      method: 'POST',
+    });
     setNorms(data.norms);
+    void loadResumen();
     return data.total;
   }
 
@@ -157,8 +178,14 @@ export default function Page() {
         <div className="mt-7">
           {section === 'resumen' && (
             <ResumenView
+              resumen={resumen}
+              loading={resumenCargando}
               onOpenCatalog={() => setSection('catalogo')}
               onOpenEvaluations={() => setSection('evaluaciones')}
+              onOpenDocument={(documentId) => {
+                setOpenDocumentId(documentId);
+                setSection('documentos');
+              }}
             />
           )}
 

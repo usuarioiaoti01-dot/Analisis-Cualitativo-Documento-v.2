@@ -6,7 +6,8 @@ import type { NormRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-const SELECT_NORMS = 'SELECT id, code, title, issuer, subject, status FROM norms ORDER BY id';
+const SELECT_NORMS =
+  'SELECT id, code, title, issuer, subject, status, created_at FROM norms ORDER BY id';
 
 /** GET /api/catalog — normas registradas para sustentar las evaluaciones. */
 export function GET() {
