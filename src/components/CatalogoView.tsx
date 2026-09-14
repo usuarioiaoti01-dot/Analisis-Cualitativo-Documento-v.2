@@ -1,39 +1,90 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { BookOpen, Search, Upload } from 'lucide-react';
-import type { NormRecord } from '@/lib/types';
+import { useMemo, useRef, useState } from 'react';
+import { BookOpen, Check, Pencil, Search, Trash2, Upload, X } from 'lucide-react';
+import type { NormRecord, ResultadoIncorporacion } from '@/lib/types';
+
+const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
+  incorporada: 'text-sev-low-ink',
+  duplicada: 'text-ink-muted',
+  sin_identificar: 'text-sev-medium-ink',
+  error: 'text-sev-high-ink',
+};
+
+const ACEPTADOS = '.pdf,.docx,.xlsx';
 
 interface CatalogoViewProps {
   norms: NormRecord[];
+  onRecargar: () => Promise<void>;
   onLoadPriority: () => Promise<number>;
 }
 
-export function CatalogoView({ norms, onLoadPriority }: CatalogoViewProps) {
-  const [query, setQuery] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoViewProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => {
+  const [query, setQuery] = useState('');
+  const [cargando, setCargando] = useState(false);
+  const [resultados, setResultados] = useState<ResultadoIncorporacion[] | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [editando, setEditando] = useState<number | null>(null);
+
+  const encontradas = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return norms;
     return norms.filter((norm) =>
-      [norm.code, norm.title, norm.issuer, norm.subject].some((field) =>
-        field.toLowerCase().includes(needle),
+      [norm.code, norm.title, norm.issuer, norm.subject].some((campo) =>
+        campo.toLowerCase().includes(needle),
       ),
     );
   }, [norms, query]);
 
-  async function handleLoad() {
-    setLoading(true);
+  /** Sube uno o varios archivos; cada uno se informa por separado. */
+  async function incorporar(archivos: FileList | null) {
+    if (!archivos || archivos.length === 0) return;
+
+    setCargando(true);
+    setResultados(null);
+    setAviso(null);
     try {
-      const total = await onLoadPriority();
-      setNotice(`Se incorporaron ${total} referencias prioritarias del inventario interno.`);
-    } catch {
-      setNotice('No fue posible incorporar las referencias prioritarias.');
+      const form = new FormData();
+      for (const archivo of Array.from(archivos)) form.append('files', archivo);
+
+      const response = await fetch('/api/catalog/documentos', { method: 'POST', body: form });
+      const payload = await response.json();
+
+      if (!response.ok && !payload.resultados) {
+        setAviso(payload.error ?? 'No fue posible incorporar los archivos.');
+        return;
+      }
+
+      setResultados(payload.resultados);
+      await onRecargar();
     } finally {
-      setLoading(false);
+      setCargando(false);
+      if (inputRef.current) inputRef.current.value = '';
     }
+  }
+
+  async function eliminar(norm: NormRecord) {
+    const response = await fetch(`/api/catalog/${norm.id}`, { method: 'DELETE' });
+    if (response.ok) await onRecargar();
+  }
+
+  async function guardar(normId: number, cambios: Partial<NormRecord>) {
+    const response = await fetch(`/api/catalog/${normId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cambios),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setAviso(payload.error ?? 'No fue posible guardar los cambios.');
+      return;
+    }
+    setEditando(null);
+    setAviso(null);
+    await onRecargar();
   }
 
   return (
@@ -52,16 +103,57 @@ export function CatalogoView({ norms, onLoadPriority }: CatalogoViewProps) {
               : `${norms.length} ${norms.length === 1 ? 'norma cargada' : 'normas cargadas'}.`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleLoad}
-          disabled={loading}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:opacity-60"
-        >
-          <Upload className="size-[18px]" aria-hidden />
-          {loading ? 'Cargando…' : 'Cargar normas prioritarias'}
-        </button>
+
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACEPTADOS}
+            multiple
+            className="hidden"
+            onChange={(event) => incorporar(event.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={cargando}
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:opacity-60"
+          >
+            <Upload className="size-[18px]" aria-hidden />
+            {cargando ? 'Incorporando…' : 'Incorporar normas'}
+          </button>
+          <p className="text-xs text-ink-muted">PDF, DOCX o XLSX · una o varias a la vez</p>
+
+          {norms.length === 0 && (
+            <button
+              type="button"
+              onClick={async () => setAviso(`Se incorporaron ${await onLoadPriority()} referencias.`)}
+              className="text-xs font-medium text-brand hover:underline"
+            >
+              Cargar las 10 normas prioritarias
+            </button>
+          )}
+        </div>
       </div>
+
+      {resultados && (
+        <ul className="mt-5 space-y-1 rounded-lg border border-hairline p-4 text-sm">
+          {resultados.map((resultado) => (
+            <li key={resultado.archivo} className="flex flex-wrap gap-x-2">
+              <span className={`font-medium ${ESTADO_TONE[resultado.estado]}`}>
+                {resultado.norma?.code ?? resultado.archivo}
+              </span>
+              <span className="text-ink-muted">— {resultado.detalle}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {aviso && (
+        <p className="mt-4 rounded-lg bg-sev-medium-bg px-4 py-3 text-sm text-sev-medium-ink">
+          {aviso}
+        </p>
+      )}
 
       <label className="mt-5 flex items-center gap-2 rounded-lg border border-hairline px-3 py-2.5 focus-within:border-brand">
         <Search className="size-[18px] text-ink-muted" aria-hidden />
@@ -74,33 +166,31 @@ export function CatalogoView({ norms, onLoadPriority }: CatalogoViewProps) {
         />
       </label>
 
-      {notice && <p className="mt-4 text-sm text-ink-muted">{notice}</p>}
-
       {norms.length === 0 ? (
-        <p className="py-14 text-center text-sm text-ink-muted">Aún no hay normas cargadas.</p>
+        <p className="py-14 text-center text-sm text-ink-muted">
+          Aún no hay normas cargadas. Use «Incorporar normas» para añadirlas.
+        </p>
       ) : (
         <ul className="mt-4 divide-y divide-hairline">
-          {results.map((norm) => (
-            <li key={norm.id} className="flex items-start gap-4 py-4">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <BookOpen className="size-[18px]" aria-hidden />
-              </span>
+          {encontradas.map((norm) =>
+            editando === norm.id ? (
+              <FilaEditable
+                key={norm.id}
+                norm={norm}
+                onCancelar={() => setEditando(null)}
+                onGuardar={(cambios) => guardar(norm.id, cambios)}
+              />
+            ) : (
+              <FilaNorma
+                key={norm.id}
+                norm={norm}
+                onEditar={() => setEditando(norm.id)}
+                onEliminar={() => eliminar(norm)}
+              />
+            ),
+          )}
 
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-ink">{norm.code}</p>
-                <p className="mt-0.5 text-sm text-ink">{norm.title}</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {norm.issuer} · {norm.subject}
-                </p>
-              </div>
-
-              <span className="shrink-0 rounded-full bg-sev-low-bg px-2.5 py-1 text-xs font-medium text-sev-low-ink">
-                {norm.status}
-              </span>
-            </li>
-          ))}
-
-          {results.length === 0 && (
+          {encontradas.length === 0 && (
             <li className="py-10 text-center text-sm text-ink-muted">
               Ninguna norma coincide con la búsqueda.
             </li>
@@ -108,5 +198,123 @@ export function CatalogoView({ norms, onLoadPriority }: CatalogoViewProps) {
         </ul>
       )}
     </section>
+  );
+}
+
+function FilaNorma({
+  norm,
+  onEditar,
+  onEliminar,
+}: {
+  norm: NormRecord;
+  onEditar: () => void;
+  onEliminar: () => void;
+}) {
+  return (
+    <li className="flex items-start gap-4 py-4">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+        <BookOpen className="size-[18px]" aria-hidden />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-ink">{norm.code}</p>
+        <p className="mt-0.5 text-sm text-ink">{norm.title}</p>
+        <p className="mt-1 text-xs text-ink-muted">
+          {norm.issuer} · {norm.subject}
+          {norm.file_name && ` · ${norm.file_name}`}
+        </p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="rounded-full bg-sev-low-bg px-2.5 py-1 text-xs font-medium text-sev-low-ink">
+          {norm.status}
+        </span>
+        <button
+          type="button"
+          onClick={onEditar}
+          aria-label={`Corregir ${norm.code}`}
+          className="rounded-lg p-1.5 text-ink-muted transition-colors hover:text-brand"
+        >
+          <Pencil className="size-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={onEliminar}
+          aria-label={`Retirar ${norm.code}`}
+          className="rounded-lg p-1.5 text-ink-muted transition-colors hover:text-sev-high-ink"
+        >
+          <Trash2 className="size-4" aria-hidden />
+        </button>
+      </div>
+    </li>
+  );
+}
+
+function FilaEditable({
+  norm,
+  onCancelar,
+  onGuardar,
+}: {
+  norm: NormRecord;
+  onCancelar: () => void;
+  onGuardar: (cambios: Partial<NormRecord>) => void;
+}) {
+  const [code, setCode] = useState(norm.code);
+  const [title, setTitle] = useState(norm.title);
+  const [issuer, setIssuer] = useState(norm.issuer);
+  const [subject, setSubject] = useState(norm.subject);
+  const [status, setStatus] = useState(norm.status);
+
+  const campo =
+    'w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-brand';
+
+  return (
+    <li className="py-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="sm:col-span-1">
+          <span className="text-xs text-ink-muted">Código</span>
+          <input value={code} onChange={(e) => setCode(e.target.value)} className={campo} />
+        </label>
+        <label className="sm:col-span-1">
+          <span className="text-xs text-ink-muted">Estado</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={campo}>
+            <option value="Vigente">Vigente</option>
+            <option value="Derogada">Derogada</option>
+            <option value="Modificada">Modificada</option>
+          </select>
+        </label>
+        <label className="sm:col-span-2">
+          <span className="text-xs text-ink-muted">Título</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className={campo} />
+        </label>
+        <label>
+          <span className="text-xs text-ink-muted">Emisor</span>
+          <input value={issuer} onChange={(e) => setIssuer(e.target.value)} className={campo} />
+        </label>
+        <label>
+          <span className="text-xs text-ink-muted">Materia</span>
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} className={campo} />
+        </label>
+      </div>
+
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancelar}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink"
+        >
+          <X className="size-4" aria-hidden />
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={() => onGuardar({ code, title, issuer, subject, status })}
+          className="flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-strong"
+        >
+          <Check className="size-4" aria-hidden />
+          Guardar
+        </button>
+      </div>
+    </li>
   );
 }

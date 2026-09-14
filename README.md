@@ -59,7 +59,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Se pueden modificar y eliminar. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
-| **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. Es lo que sustenta la validación de citas. |
+| **Catálogo normativo** | Incorporación de normas desde archivos, una o varias a la vez, con identificación automática de código, título, emisor y materia. Corrección y retiro por norma. Es lo que sustenta la validación de citas. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
 
@@ -89,7 +89,10 @@ Todas las rutas responden JSON.
 | `GET /api/motor/estado` | Comprueba con una llamada real que la credencial funciona y qué modelo está configurado. |
 | `GET /api/summary` | Cifras del panel de resumen, agregadas sobre la base. |
 | `GET /api/catalog` | Normas del catálogo. |
-| `POST /api/catalog` | Incorpora las referencias prioritarias del inventario interno. |
+| `POST /api/catalog` | Incorpora las 10 referencias prioritarias del inventario interno. |
+| `POST /api/catalog/documentos` | Incorpora una o varias normas desde sus archivos, identificándolas automáticamente. |
+| `PATCH /api/catalog/[id]` | Corrige los datos de una norma. |
+| `DELETE /api/catalog/[id]` | Retira una norma del catálogo. |
 
 ### El motor de análisis
 
@@ -169,6 +172,7 @@ src/
     extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
     segmentacion.ts Corte del texto en secciones jerárquicas
     ocr.ts      Transcripción de PDF escaneados
+    norma-metadatos.ts Identificación de una norma desde su archivo
     contenido.ts Persistencia del texto y su índice de secciones
     citas.ts    Reconocimiento de citas normativas (etapa 5)
     similitud.ts Shingling, Jaccard y contención (etapa 6)

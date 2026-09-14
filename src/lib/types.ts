@@ -192,6 +192,17 @@ export interface NormRecord {
   effective_from: number | null;
   effective_to: number | null;
   aliases: string | null;
+  created_at?: number | null;
+  file_name?: string | null;
+  storage_path?: string | null;
+}
+
+/** Resultado de incorporar un archivo al catálogo. */
+export interface ResultadoIncorporacion {
+  archivo: string;
+  estado: 'incorporada' | 'duplicada' | 'sin_identificar' | 'error';
+  norma?: NormRecord;
+  detalle: string;
 }
 
 /** Coincidencia entre el documento evaluado y otro del repositorio. */

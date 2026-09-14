@@ -148,6 +148,31 @@ Hallazgos que emite:
 Una norma citada veinte veces produce un hallazgo, no veinte; el mensaje indica
 cuántas veces aparece.
 
+### Incorporación de normas al catálogo
+
+`POST /api/catalog/documentos` admite uno o varios archivos y los procesa por
+separado: que uno no se identifique no impide que entren los demás.
+
+El problema difícil no es leer el archivo, sino **saber cuál de los códigos que
+aparecen es el suyo**. La primera cita del texto casi nunca lo es: un reglamento
+empieza nombrando la ley que reglamenta, y una directiva lista su base legal
+antes de decir cómo se llama. Tomar la primera cita registró «Ley N.º 31814»
+como código de un decreto supremo, y eso habría emparejado mal todas las citas
+de la etapa 5.
+
+Por eso el código lo decide el modelo, que lee el encabezado y el nombre del
+archivo y distingue la norma propia de las referidas. Lo que devuelve **se
+normaliza con el mismo extractor de citas** que usa la validación normativa: si
+el extractor no lo reconoce, tampoco lo emparejaría después, así que se rechaza.
+
+Los duplicados se detectan por la clave normalizada, no por el texto: un archivo
+de la directiva de firma digital se reconoció como ya presente en el catálogo
+pese a llamarse de otro modo.
+
+Sin credencial se cae al nombre del archivo —que en los repositorios
+institucionales suele contener el código propio— y el resultado se marca para
+revisión. En cualquier caso la ficha es corregible: `PATCH /api/catalog/[id]`.
+
 ## Etapa 6 — comparación con el repositorio
 
 Usa *shingling*: el texto se corta en secuencias solapadas de cinco palabras y se

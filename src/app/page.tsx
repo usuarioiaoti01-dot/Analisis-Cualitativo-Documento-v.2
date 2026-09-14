@@ -252,7 +252,16 @@ export default function Page() {
             />
           )}
 
-          {section === 'catalogo' && <CatalogoView norms={norms} onLoadPriority={loadPriorityNorms} />}
+          {section === 'catalogo' && (
+            <CatalogoView
+              norms={norms}
+              onRecargar={async () => {
+                await loadCatalog();
+                void loadResumen();
+              }}
+              onLoadPriority={loadPriorityNorms}
+            />
+          )}
 
           {(section === 'usuarios' || section === 'configuracion') && (
             <ModuloPendiente title={current.title} onBack={() => setSection('resumen')} />

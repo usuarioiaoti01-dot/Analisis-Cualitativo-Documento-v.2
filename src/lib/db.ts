@@ -181,7 +181,10 @@ function createSchema(db: DatabaseSync): void {
       -- Formas alternativas de citar la misma norma, separadas por '|'.
       aliases        TEXT,
       -- Cuándo se incorporó al catálogo, para poder informar su actualización.
-      created_at     INTEGER
+      created_at     INTEGER,
+      -- Archivo de la norma, cuando se incorporó subiéndolo.
+      file_name      TEXT,
+      storage_path   TEXT
     );
 
     -- Etapa 6: coincidencias entre el documento evaluado y el repositorio.
@@ -260,6 +263,8 @@ function migrateSchema(db: DatabaseSync): void {
     ['effective_to', 'INTEGER'],
     ['aliases', 'TEXT'],
     ['created_at', 'INTEGER'],
+    ['file_name', 'TEXT'],
+    ['storage_path', 'TEXT'],
   ]);
 
   // `findings` cambió de forma por completo. En el esquema anterior nunca se
