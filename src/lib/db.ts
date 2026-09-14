@@ -64,6 +64,9 @@ function createSchema(db: DatabaseSync): void {
       document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       ordinal     INTEGER NOT NULL,
       numbering   TEXT,
+      -- Profundidad en el índice: los numerales cuelgan de su sección padre.
+      level       INTEGER NOT NULL DEFAULT 1,
+      parent_id   INTEGER REFERENCES document_sections(id) ON DELETE CASCADE,
       heading     TEXT NOT NULL,
       content     TEXT NOT NULL,
       page_from   INTEGER,
@@ -222,6 +225,11 @@ function migrateSchema(db: DatabaseSync): void {
     ['char_count', 'INTEGER'],
     ['extraction_status', "TEXT NOT NULL DEFAULT 'none'"],
     ['extraction_notes', 'TEXT'],
+  ]);
+
+  addMissingColumns(db, 'document_sections', [
+    ['level', 'INTEGER NOT NULL DEFAULT 1'],
+    ['parent_id', 'INTEGER'],
   ]);
 
   addMissingColumns(db, 'criteria', [

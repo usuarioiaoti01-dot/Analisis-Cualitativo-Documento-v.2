@@ -119,6 +119,9 @@ export interface SectionRecord {
   document_id: string;
   ordinal: number;
   numbering: string | null;
+  /** 1 para las secciones principales; 2 y 3 para los numerales que cuelgan de ellas. */
+  level: number;
+  parent_id: number | null;
   heading: string;
   /** Extracto del cuerpo. El listado no transporta la sección completa. */
   content: string;

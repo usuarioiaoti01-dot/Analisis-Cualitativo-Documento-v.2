@@ -15,6 +15,13 @@ export interface Seccion {
   ordinal: number;
   /** Numeración tal como aparece: «I», «4.2», «Artículo 12». Nulo si no la tiene. */
   numbering: string | null;
+  /**
+   * Profundidad en el índice. Los romanos, los artículos y los títulos sin
+   * numerar son de primer nivel; «4.2» es de segundo y «4.2.1» de tercero. Es
+   * lo que permite mostrar los numerales colgando de su sección padre en lugar
+   * de como un listado plano de cientos de entradas.
+   */
+  level: number;
   heading: string;
   content: string;
   pageFrom: number | null;
@@ -50,6 +57,18 @@ const PATRONES: { regex: RegExp; numero: (m: RegExpMatchArray) => string }[] = [
   },
 ];
 
+/**
+ * Profundidad de una sección a partir de su numeración. Un numeral decimal
+ * tiene tantos niveles como tramos: «4» es 1, «4.2» es 2, «4.2.1» es 3.
+ */
+export function nivelDe(numbering: string | null): number {
+  if (!numbering) return 1;
+  if (/^Art[íi]culo/i.test(numbering)) return 1;
+  if (/^[IVXLCDM]+$/.test(numbering)) return 1;
+
+  return Math.min(numbering.split('.').length, 4);
+}
+
 /** Un renglón en mayúsculas y sin punto final se trata como título. */
 function esTituloEnMayusculas(linea: string): boolean {
   const limpio = linea.trim();
@@ -72,6 +91,12 @@ function detectarEncabezado(linea: string): { numbering: string | null; heading:
 
     // Un numeral seguido de una frase larga suele ser un párrafo, no un título.
     if (texto.length > 120) continue;
+
+    // Un encabezado no empieza en minúscula. Esto descarta las menciones
+    // dentro de una frase —«Artículo 11 de la LCE», «4.2 de la presente
+    // directiva»— que el corte de renglón del PDF deja al inicio de la línea.
+    if (/^[a-záéíóúñ]/.test(texto)) continue;
+
     return { numbering, heading: texto };
   }
 
@@ -104,6 +129,7 @@ export function segmentar(texto: string): Seccion[] {
     secciones.push({
       ordinal: secciones.length + 1,
       numbering: actual.numbering,
+      level: nivelDe(actual.numbering),
       heading: actual.heading,
       content: actual.cuerpo.join('\n').trim(),
       pageFrom: actual.pageFrom,
@@ -184,6 +210,7 @@ export function segmentar(texto: string): Seccion[] {
       {
         ordinal: 1,
         numbering: null,
+        level: 1,
         heading: 'Documento completo',
         content: texto.trim(),
         pageFrom: null,

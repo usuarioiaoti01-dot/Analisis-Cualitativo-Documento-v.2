@@ -9,7 +9,7 @@ etapa. Es la referencia para saber qué está construido y qué no.
 |---|---|---|
 | 1. Registro del documento | Carga el documento, identifica tipo documental, fecha y versión. | 🟡 Parcial — faltan autor, unidad responsable, fecha propia del documento, versionado y carga múltiple |
 | 2. Definición de matriz de criterios | El evaluador selecciona o configura criterios, pesos, escalas y reglas. | 🟢 Operativo — cinco matrices precargadas, escala 1–5, indicadores por criterio |
-| 3. Extracción y estructuración | Obtiene texto y lo segmenta en secciones numeradas. | 🟡 Parcial — texto y secciones sí; faltan tablas, citas, fechas, responsables y anexos como entidades propias |
+| 3. Extracción y estructuración | Obtiene texto y lo segmenta en secciones jerárquicas. | 🟡 Parcial — texto y secciones con sus numerales anidados; faltan tablas, fechas, responsables y anexos como entidades propias |
 | 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🟢 Operativa — motor con IA que lee el documento y emite hallazgos con evidencia verificada; el provisional se conserva como alternativa |
 | 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🟢 Operativa — reconoce las citas, las verifica y emite hallazgos con evidencia |
 | 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🟢 Operativa — Jaccard y contención sobre shingles, con fragmentos coincidentes |
@@ -78,6 +78,22 @@ producen hallazgos —4, 5 y 6— escriben en ella con la misma forma.
 
 `source` distingue de dónde nació el hallazgo: `evaluacion` (etapa 4),
 `normativa` (etapa 5) o `similitud` (etapa 6).
+
+### Jerarquía de secciones
+
+Las secciones se anidan por su numeración: los romanos, los artículos y los
+títulos sin numerar son de primer nivel, «4.2» cuelga de «IV» y «4.2.1» de
+«4.2». Sin eso el índice de una directiva de 50 páginas es un listado plano de
+cientos de entradas que no sirve para navegar.
+
+Un encabezado no empieza en minúscula. Esa sola regla descarta las menciones
+dentro de una frase —«Artículo 11 de la LCE», «4.2 de la presente directiva»—
+que el corte de renglón del PDF deja al inicio de la línea y que antes se
+tomaban por títulos.
+
+Queda ruido inevitable en documentos con muchas tablas y formularios: las filas
+de una tabla en mayúsculas se parecen a un título. Resolverlo requiere
+reconocer tablas en la extracción, que es un trabajo aparte.
 
 ## Etapa 5 — validación legal y normativa
 

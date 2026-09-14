@@ -72,7 +72,7 @@ Todas las rutas responden JSON.
 | `POST /api/documents` | Registra un documento. Con `multipart/form-data` (`file`, `document_type`) guarda el archivo y extrae su texto; con JSON (`{ title, document_type }`) registra solo la ficha. |
 | `GET /api/documents/[id]` | Ficha del documento con sus secciones, evaluaciones, resultados por criterio y hallazgos. |
 | `GET /api/documents/[id]/texto` | Texto extraído completo, aparte para no cargarlo en cada apertura de la ficha. |
-| `DELETE /api/documents/[id]` | Elimina el documento, su texto y el archivo original. |
+| `DELETE /api/documents/[id]` | Elimina el documento, su texto, secciones, evaluaciones, hallazgos y el archivo original. Disponible desde la ficha del documento, con confirmación. |
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `POST /api/documents/[id]/contraste` | Ejecuta las etapas 5 y 6 y emite hallazgos. Cuerpo opcional: `{ etapas: ['normativa', 'similitud'] }`. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
@@ -149,7 +149,7 @@ src/
     db.ts       Conexión, esquema y migraciones SQLite
     almacen.ts  Guardado y lectura de los archivos originales
     extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
-    segmentacion.ts Corte del texto en secciones numeradas
+    segmentacion.ts Corte del texto en secciones jerárquicas
     citas.ts    Reconocimiento de citas normativas (etapa 5)
     similitud.ts Shingling, Jaccard y contención (etapa 6)
     motor-ia.ts Evaluación del contenido con Claude (etapa 4)

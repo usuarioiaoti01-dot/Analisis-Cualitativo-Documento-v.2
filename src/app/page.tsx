@@ -194,6 +194,10 @@ export default function Page() {
               <DocumentoDetalle
                 documentId={openDocumentId}
                 onBack={() => setOpenDocumentId(null)}
+                onDeleted={() => {
+                  setOpenDocumentId(null);
+                  void Promise.all([loadDocuments(), loadEvaluations(), loadResumen()]);
+                }}
               />
             ) : (
               <DocumentosView

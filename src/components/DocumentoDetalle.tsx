@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ExternalLink, FileText, Loader2, ScanSearch } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronRight,
+  ExternalLink,
+  FileText,
+  Loader2,
+  ScanSearch,
+  Trash2,
+} from 'lucide-react';
+import { Modal } from './Modal';
 import {
   ENGINE_LABEL,
   EXTRACTION_LABEL,
@@ -54,9 +64,11 @@ interface Respuesta {
 interface DocumentoDetalleProps {
   documentId: string;
   onBack: () => void;
+  /** Se invoca tras eliminar, para que el repositorio y el panel se actualicen. */
+  onDeleted: () => void;
 }
 
-export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) {
+export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDetalleProps) {
   const [data, setData] = useState<Respuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +78,9 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
   const [contrastando, setContrastando] = useState(false);
   const [avisoContraste, setAvisoContraste] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
+  const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
+  const [borrando, setBorrando] = useState(false);
+  const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +135,24 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
       setRecarga((valor) => valor + 1);
     } finally {
       setContrastando(false);
+    }
+  }
+
+  /** Elimina el documento, su texto, sus evaluaciones, hallazgos y el archivo. */
+  async function eliminarDocumento() {
+    setBorrando(true);
+    setErrorBorrado(null);
+    try {
+      const response = await fetch(`/api/documents/${documentId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setErrorBorrado(payload.error ?? 'No fue posible eliminar el documento.');
+        return;
+      }
+      setConfirmandoBorrado(false);
+      onDeleted();
+    } finally {
+      setBorrando(false);
     }
   }
 
@@ -241,6 +274,16 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
               Ver original
             </a>
           )}
+
+            <button
+              type="button"
+              onClick={() => setConfirmandoBorrado(true)}
+              aria-label="Eliminar documento"
+              title="Eliminar documento"
+              className="flex size-10 items-center justify-center rounded-lg border border-hairline text-ink-muted transition-colors hover:border-sev-high-ink hover:text-sev-high-ink"
+            >
+              <Trash2 className="size-[18px]" aria-hidden />
+            </button>
           </div>
         </div>
 
@@ -303,36 +346,144 @@ export function DocumentoDetalle({ documentId, onBack }: DocumentoDetalleProps) 
             ))}
         </div>
       </section>
+
+      {confirmandoBorrado && (
+        <Modal
+          title="Eliminar documento"
+          description="Esta acción no se puede deshacer."
+          onClose={() => setConfirmandoBorrado(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirmandoBorrado(false)}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={eliminarDocumento}
+                disabled={borrando}
+                className="rounded-lg bg-sev-high-ink px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+              >
+                {borrando ? 'Eliminando…' : 'Eliminar definitivamente'}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink">
+            Se eliminará <strong>{document.title}</strong> junto con su texto extraído, sus{' '}
+            {sections.length} secciones, {evaluations.length} evaluación(es), {findings.length}{' '}
+            hallazgo(s) y el archivo original guardado en el servidor.
+          </p>
+          {errorBorrado && <p className="mt-3 text-sm text-sev-high-ink">{errorBorrado}</p>}
+        </Modal>
+      )}
     </div>
   );
 }
 
 function Secciones({ sections }: { sections: SectionRecord[] }) {
-  if (sections.length === 0) {
-    return <p className="py-10 text-center text-sm text-ink-muted">El documento no tiene secciones reconocidas.</p>;
+  // Numerales agrupados bajo su sección padre: un listado plano de cientos de
+  // entradas no sirve como índice.
+  const hijosPorPadre = new Map<number, SectionRecord[]>();
+  for (const seccion of sections) {
+    if (seccion.parent_id === null) continue;
+    const hermanos = hijosPorPadre.get(seccion.parent_id) ?? [];
+    hermanos.push(seccion);
+    hijosPorPadre.set(seccion.parent_id, hermanos);
+  }
+
+  const raices = sections.filter((seccion) => seccion.parent_id === null);
+
+  if (raices.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-ink-muted">
+        El documento no tiene secciones reconocidas.
+      </p>
+    );
   }
 
   return (
     <ul className="divide-y divide-hairline">
-      {sections.map((section) => (
-        <li key={section.id} className="py-4">
-          <div className="flex items-baseline gap-3">
-            {section.numbering && (
-              <span className="shrink-0 rounded bg-blue-50 px-2 py-0.5 font-mono text-xs text-blue-700">
-                {section.numbering}
-              </span>
-            )}
-            <h3 className="font-medium text-ink">{section.heading}</h3>
-            {section.page_from && (
-              <span className="ml-auto shrink-0 text-xs text-ink-muted">pág. {section.page_from}</span>
-            )}
-          </div>
-          {section.content && (
-            <p className="mt-1.5 line-clamp-3 text-sm text-ink-muted">{section.content}</p>
-          )}
-        </li>
+      {raices.map((seccion) => (
+        <SeccionEnArbol
+          key={seccion.id}
+          seccion={seccion}
+          hijosPorPadre={hijosPorPadre}
+        />
       ))}
     </ul>
+  );
+}
+
+function SeccionEnArbol({
+  seccion,
+  hijosPorPadre,
+  profundidad = 0,
+}: {
+  seccion: SectionRecord;
+  hijosPorPadre: Map<number, SectionRecord[]>;
+  profundidad?: number;
+}) {
+  const hijos = hijosPorPadre.get(seccion.id) ?? [];
+  const [abierta, setAbierta] = useState(false);
+
+  return (
+    <li className="py-3" style={{ paddingLeft: profundidad * 20 }}>
+      <div className="flex items-baseline gap-3">
+        {hijos.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setAbierta((valor) => !valor)}
+            aria-expanded={abierta}
+            className="-ml-1 shrink-0 rounded p-1 text-ink-muted transition-colors hover:text-ink"
+          >
+            <ChevronRight
+              className={`size-4 transition-transform ${abierta ? 'rotate-90' : ''}`}
+              aria-hidden
+            />
+          </button>
+        ) : (
+          <span className="w-5 shrink-0" aria-hidden />
+        )}
+
+        {seccion.numbering && (
+          <span className="shrink-0 rounded bg-blue-50 px-2 py-0.5 font-mono text-xs text-blue-700">
+            {seccion.numbering}
+          </span>
+        )}
+
+        <h3 className="min-w-0 flex-1 font-medium text-ink">{seccion.heading}</h3>
+
+        {hijos.length > 0 && (
+          <span className="shrink-0 text-xs text-ink-muted">
+            {hijos.length} {hijos.length === 1 ? 'numeral' : 'numerales'}
+          </span>
+        )}
+        {seccion.page_from && (
+          <span className="shrink-0 text-xs text-ink-muted">pág. {seccion.page_from}</span>
+        )}
+      </div>
+
+      {seccion.content && (
+        <p className="mt-1.5 ml-8 line-clamp-2 text-sm text-ink-muted">{seccion.content}</p>
+      )}
+
+      {abierta && hijos.length > 0 && (
+        <ul className="mt-2 divide-y divide-hairline border-l border-hairline">
+          {hijos.map((hijo) => (
+            <SeccionEnArbol
+              key={hijo.id}
+              seccion={hijo}
+              hijosPorPadre={hijosPorPadre}
+              profundidad={profundidad + 1}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 

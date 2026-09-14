@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   // duplicaría el texto del documento, que ya viaja una vez en `content`.
   const sections = queryAll<SectionRecord>(
     db,
-    `SELECT id, document_id, ordinal, numbering, heading,
+    `SELECT id, document_id, ordinal, numbering, level, parent_id, heading,
             substr(content, 1, 400) AS content, length(content) AS content_length,
             page_from, page_to, char_start, char_end
      FROM document_sections WHERE document_id = ? ORDER BY ordinal`,

@@ -127,22 +127,46 @@ async function registrarConArchivo(request: Request) {
       // citar una sección concreta en lugar de un rango de caracteres.
       const insertSection = db.prepare(
         `INSERT INTO document_sections
-           (document_id, ordinal, numbering, heading, content, page_from, page_to, char_start, char_end)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (document_id, ordinal, numbering, level, parent_id, heading, content,
+            page_from, page_to, char_start, char_end)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
 
+      // Último identificador insertado en cada nivel: el padre de una sección
+      // es la anterior más cercana de nivel inferior.
+      const ultimoPorNivel = new Map<number, number>();
+
       for (const seccion of segmentar(content)) {
-        insertSection.run(
-          id,
-          seccion.ordinal,
-          seccion.numbering,
-          seccion.heading,
-          seccion.content,
-          seccion.pageFrom,
-          seccion.pageTo,
-          seccion.charStart,
-          seccion.charEnd,
+        let parentId: number | null = null;
+        for (let nivel = seccion.level - 1; nivel >= 1; nivel -= 1) {
+          const candidato = ultimoPorNivel.get(nivel);
+          if (candidato !== undefined) {
+            parentId = candidato;
+            break;
+          }
+        }
+
+        const sectionId = Number(
+          insertSection.run(
+            id,
+            seccion.ordinal,
+            seccion.numbering,
+            seccion.level,
+            parentId,
+            seccion.heading,
+            seccion.content,
+            seccion.pageFrom,
+            seccion.pageTo,
+            seccion.charStart,
+            seccion.charEnd,
+          ).lastInsertRowid,
         );
+
+        ultimoPorNivel.set(seccion.level, sectionId);
+        // Una sección nueva invalida a las más profundas que la precedían.
+        for (const nivel of [...ultimoPorNivel.keys()]) {
+          if (nivel > seccion.level) ultimoPorNivel.delete(nivel);
+        }
       }
     }
   });
