@@ -86,6 +86,7 @@ Todas las rutas responden JSON.
 | `PATCH /api/findings/[id]` | Decisión sobre un hallazgo: `aceptado`, `descartado`, `subsanado` o `pendiente`. |
 | `POST /api/evaluations/[id]/validar` | Valida la evaluación. Responde 409 si quedan hallazgos pendientes. |
 | `GET /api/documents/[id]/informe` | Informe consolidado del documento. |
+| `GET /api/motor/estado` | Comprueba con una llamada real que la credencial funciona y qué modelo está configurado. |
 | `GET /api/summary` | Cifras del panel de resumen, agregadas sobre la base. |
 | `GET /api/catalog` | Normas del catálogo. |
 | `POST /api/catalog` | Incorpora las referencias prioritarias del inventario interno. |

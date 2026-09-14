@@ -1,7 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Pencil, Play, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  Pencil,
+  Play,
+  Plug,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react';
 import type { TemplateRecord } from '@/lib/types';
 
 export type Motor = 'ai' | 'deterministic';
@@ -33,6 +41,22 @@ export function EvaluacionesView({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorMatriz, setErrorMatriz] = useState<string | null>(null);
+  const [probando, setProbando] = useState(false);
+  const [estadoMotor, setEstadoMotor] = useState<{ valida: boolean; mensaje: string } | null>(null);
+
+  /** Comprueba que la credencial funciona antes de lanzar una evaluación larga. */
+  async function probarConexion() {
+    setProbando(true);
+    setEstadoMotor(null);
+    try {
+      const estado = await fetch('/api/motor/estado').then((r) => r.json());
+      setEstadoMotor({ valida: estado.valida, mensaje: estado.mensaje });
+    } catch {
+      setEstadoMotor({ valida: false, mensaje: 'No fue posible contactar con el servidor.' });
+    } finally {
+      setProbando(false);
+    }
+  }
 
   const iaDisponible = motor?.ia_disponible ?? false;
   const [engine, setEngine] = useState<Motor>('ai');
@@ -130,9 +154,30 @@ export function EvaluacionesView({
         )}
 
         {iaDisponible && motorEfectivo === 'ai' && (
-          <p className="mt-4 text-sm text-ink-muted">
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
             El análisis lee el documento completo y puede tardar varios minutos. Modelo:{' '}
             <code className="rounded bg-canvas px-1.5 py-0.5 text-xs">{motor?.modelo}</code>.
+            <button
+              type="button"
+              onClick={probarConexion}
+              disabled={probando}
+              className="flex items-center gap-1.5 font-medium text-brand hover:underline disabled:opacity-60"
+            >
+              <Plug className="size-3.5" aria-hidden />
+              {probando ? 'Probando…' : 'Probar conexión'}
+            </button>
+          </p>
+        )}
+
+        {estadoMotor && (
+          <p
+            className={`mt-3 rounded-lg px-4 py-3 text-sm ${
+              estadoMotor.valida
+                ? 'bg-sev-low-bg text-sev-low-ink'
+                : 'bg-sev-high-bg text-sev-high-ink'
+            }`}
+          >
+            {estadoMotor.mensaje}
           </p>
         )}
 
