@@ -16,7 +16,8 @@ repositorio e informe— sobre cinco dimensiones ponderadas y una escala de 1 a 
 Qué está construido y qué no, etapa por etapa, está en
 [`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
-**Estado actual:** las etapas 1 a 6 funcionan; la 7 no está implementada.
+**Estado actual:** las siete etapas funcionan. Lo que falta son metadatos de la
+etapa 1 (autor, unidad responsable), OCR para PDF escaneados y autenticación.
 
 ## Origen
 
@@ -57,7 +58,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 |---|---|
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
-| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
+| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Se pueden modificar y eliminar. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
 | **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. Es lo que sustenta la validación de citas. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
@@ -78,6 +79,12 @@ Todas las rutas responden JSON.
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
 | `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id, engine }`, donde `engine` es `ai` (por omisión) o `deterministic`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
+| `GET /api/evaluations/templates/[id]` | Matriz con sus criterios vigentes. |
+| `PUT /api/evaluations/templates/[id]` | Modifica una matriz. Los criterios retirados que ya fueron calificados se archivan en lugar de borrarse. |
+| `DELETE /api/evaluations/templates/[id]` | Elimina la matriz. Responde 409 si ya se usó en alguna evaluación. |
+| `PATCH /api/findings/[id]` | Decisión sobre un hallazgo: `aceptado`, `descartado`, `subsanado` o `pendiente`. |
+| `POST /api/evaluations/[id]/validar` | Valida la evaluación. Responde 409 si quedan hallazgos pendientes. |
+| `GET /api/documents/[id]/informe` | Informe consolidado del documento. |
 | `GET /api/summary` | Cifras del panel de resumen, agregadas sobre la base. |
 | `GET /api/catalog` | Normas del catálogo. |
 | `POST /api/catalog` | Incorpora las referencias prioritarias del inventario interno. |
@@ -143,6 +150,11 @@ src/
       evaluations/templates/route.ts  POST (crear matriz)
       catalog/route.ts                GET, POST
       summary/route.ts                GET (cifras del panel)
+      documents/[id]/informe/route.ts GET (informe consolidado)
+      evaluations/[id]/validar/route.ts POST (etapa 7)
+      evaluations/templates/[id]/route.ts GET, PUT, DELETE
+      findings/[id]/route.ts          PATCH (decisión sobre un hallazgo)
+    informe/[id]/page.tsx             Informe imprimible
     layout.tsx  globals.css  page.tsx
   components/                         Vistas y modales
   lib/
@@ -157,6 +169,7 @@ src/
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
     rubric.ts   Matrices por tipo documental, escala y normas prioritarias
+    sesion.ts   Identidad de quien valida, hasta que haya autenticación
     types.ts    Tipos compartidos
     sections.ts Secciones del espacio de trabajo
 ```
@@ -177,8 +190,6 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
 - **Etapa 4** — motor de análisis real: evaluar el texto extraído contra cada
   criterio y emitir hallazgos con evidencia citada. Hoy el puntaje es
   determinista, no analítico.
-- **Etapa 7** — informe consolidado, validación humana de cada hallazgo y
-  exportación.
 - El motor de análisis está construido y verificado en todo lo que no requiere
   credencial, pero **no se ha ejecutado contra la API real**: falta una corrida
   con `ANTHROPIC_API_KEY` configurada.
@@ -187,5 +198,6 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
 - Metadatos de la etapa 1: autor, unidad responsable, fecha propia del documento,
   versionado y carga múltiple.
 - OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».
-- Autenticación y autorización. La sesión de la barra lateral es fija.
+- Autenticación y autorización. La identidad sale de `src/lib/sesion.ts`, así que
+  la trazabilidad es nominal: registra un nombre, no prueba quién lo escribió.
 - Los módulos «Usuarios y roles» y «Configuración» son marcadores.

@@ -8,6 +8,8 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  FileCheck2,
+  Printer,
   ScanSearch,
   Trash2,
 } from 'lucide-react';
@@ -15,6 +17,7 @@ import { Modal } from './Modal';
 import {
   ENGINE_LABEL,
   EXTRACTION_LABEL,
+  FINDING_STATUS_LABEL,
   OUTCOME_LABEL,
   RISK_LABEL,
   SOURCE_LABEL,
@@ -26,6 +29,7 @@ import {
   type ExtractionStatus,
   type FindingRecord,
   type FindingSource,
+  type FindingStatus,
   type Risk,
   type SectionRecord,
 } from '@/lib/types';
@@ -66,9 +70,16 @@ interface DocumentoDetalleProps {
   onBack: () => void;
   /** Se invoca tras eliminar, para que el repositorio y el panel se actualicen. */
   onDeleted: () => void;
+  /** Se invoca tras cualquier cambio que altere las cifras del panel. */
+  onChanged: () => void;
 }
 
-export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDetalleProps) {
+export function DocumentoDetalle({
+  documentId,
+  onBack,
+  onDeleted,
+  onChanged,
+}: DocumentoDetalleProps) {
   const [data, setData] = useState<Respuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +92,8 @@ export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDet
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
+  const [validando, setValidando] = useState(false);
+  const [avisoValidacion, setAvisoValidacion] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +148,39 @@ export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDet
       setRecarga((valor) => valor + 1);
     } finally {
       setContrastando(false);
+    }
+  }
+
+  /** Etapa 7: la decisión humana sobre un hallazgo. */
+  async function decidirHallazgo(findingId: number, status: FindingStatus) {
+    const response = await fetch(`/api/findings/${findingId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (response.ok) {
+      setAvisoValidacion(null);
+      setRecarga((valor) => valor + 1);
+      onChanged();
+    }
+  }
+
+  /** Etapa 7: cierre de la evaluación. Exige que no queden hallazgos pendientes. */
+  async function validarEvaluacion(evaluationId: string) {
+    setValidando(true);
+    setAvisoValidacion(null);
+    try {
+      const response = await fetch(`/api/evaluations/${evaluationId}/validar`, { method: 'POST' });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setAvisoValidacion(payload.error ?? 'No fue posible validar la evaluación.');
+        return;
+      }
+      setRecarga((valor) => valor + 1);
+      onChanged();
+    } finally {
+      setValidando(false);
     }
   }
 
@@ -275,6 +321,16 @@ export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDet
             </a>
           )}
 
+            <a
+              href={`/informe/${documentId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-hairline px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+            >
+              <Printer className="size-[18px]" aria-hidden />
+              Informe
+            </a>
+
             <button
               type="button"
               onClick={() => setConfirmandoBorrado(true)}
@@ -331,8 +387,19 @@ export function DocumentoDetalle({ documentId, onBack, onDeleted }: DocumentoDet
 
         <div className="p-6">
           {pestana === 'secciones' && <Secciones sections={sections} />}
-          {pestana === 'resultados' && <Resultados results={results} evaluacion={ultima} />}
-          {pestana === 'hallazgos' && <Hallazgos findings={findings} />}
+          {pestana === 'resultados' && (
+            <Resultados
+              results={results}
+              evaluacion={ultima}
+              pendientes={findings.filter((f) => f.status === 'pendiente').length}
+              validando={validando}
+              aviso={avisoValidacion}
+              onValidar={validarEvaluacion}
+            />
+          )}
+          {pestana === 'hallazgos' && (
+            <Hallazgos findings={findings} onDecidir={decidirHallazgo} />
+          )}
           {pestana === 'texto' &&
             (textoCargando || texto === null ? (
               <p className="py-10 text-center text-sm text-ink-muted">
@@ -490,9 +557,17 @@ function SeccionEnArbol({
 function Resultados({
   results,
   evaluacion,
+  pendientes,
+  validando,
+  aviso,
+  onValidar,
 }: {
   results: EvaluationResultRecord[];
   evaluacion: EvaluationRecord | undefined;
+  pendientes: number;
+  validando: boolean;
+  aviso: string | null;
+  onValidar: (evaluationId: string) => void;
 }) {
   if (results.length === 0) {
     return (
@@ -510,6 +585,39 @@ function Resultados({
           Motor: {ENGINE_LABEL[evaluacion.engine]}. Ejecutada el{' '}
           {new Date(evaluacion.created_at).toLocaleString('es-PE')}.
         </p>
+      )}
+
+      {evaluacion && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline px-4 py-3">
+          {evaluacion.validated_at ? (
+            <p className="flex items-center gap-2 text-sm text-sev-low-ink">
+              <FileCheck2 className="size-4" aria-hidden />
+              Validada por {evaluacion.validated_by} el{' '}
+              {new Date(evaluacion.validated_at).toLocaleString('es-PE')}.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-ink-muted">
+                {pendientes > 0
+                  ? `Quedan ${pendientes} hallazgo(s) sin decidir. La conformidad requiere resolverlos primero.`
+                  : 'Sin hallazgos pendientes: la evaluación puede validarse.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => onValidar(evaluacion.id)}
+                disabled={validando || pendientes > 0}
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileCheck2 className="size-[18px]" aria-hidden />
+                {validando ? 'Validando…' : 'Validar evaluación'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {aviso && (
+        <p className="mb-4 rounded-lg bg-sev-high-bg px-4 py-3 text-sm text-sev-high-ink">{aviso}</p>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-hairline">
@@ -565,7 +673,27 @@ const SOURCE_TONE: Record<FindingSource, string> = {
 /** Orden de presentación: primero lo más grave. */
 const ORDEN_RIESGO: Record<Risk, number> = { critico: 0, alto: 1, medio: 2, bajo: 3 };
 
-function Hallazgos({ findings }: { findings: FindingRecord[] }) {
+const ESTADO_TONE: Record<FindingStatus, string> = {
+  pendiente: 'bg-slate-100 text-slate-600',
+  aceptado: 'bg-blue-50 text-blue-700',
+  descartado: 'bg-slate-100 text-slate-500',
+  subsanado: 'bg-sev-low-bg text-sev-low-ink',
+};
+
+/** Decisiones que puede tomar el revisor sobre un hallazgo. */
+const DECISIONES: { estado: FindingStatus; etiqueta: string }[] = [
+  { estado: 'aceptado', etiqueta: 'Aceptar' },
+  { estado: 'subsanado', etiqueta: 'Subsanado' },
+  { estado: 'descartado', etiqueta: 'Descartar' },
+];
+
+function Hallazgos({
+  findings,
+  onDecidir,
+}: {
+  findings: FindingRecord[];
+  onDecidir: (findingId: number, status: FindingStatus) => void;
+}) {
   if (findings.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-ink-muted">
@@ -616,6 +744,46 @@ function Hallazgos({ findings }: { findings: FindingRecord[] }) {
               {finding.reference_label && (
                 <p className="mt-1 text-xs text-ink-muted">Contrastado con: {finding.reference_label}</p>
               )}
+
+              {/* Etapa 7: el sistema detecta, una persona decide. */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_TONE[finding.status]}`}
+                >
+                  {FINDING_STATUS_LABEL[finding.status]}
+                </span>
+
+                {finding.status === 'pendiente' ? (
+                  DECISIONES.map((decision) => (
+                    <button
+                      key={decision.estado}
+                      type="button"
+                      onClick={() => onDecidir(finding.id, decision.estado)}
+                      className="rounded-lg border border-hairline px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-brand hover:text-brand"
+                    >
+                      {decision.etiqueta}
+                    </button>
+                  ))
+                ) : (
+                  <>
+                    {finding.resolved_by && (
+                      <span className="text-xs text-ink-muted">
+                        {finding.resolved_by}
+                        {finding.resolved_at
+                          ? ` · ${new Date(finding.resolved_at).toLocaleDateString('es-PE')}`
+                          : ''}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onDecidir(finding.id, 'pendiente')}
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:text-brand"
+                    >
+                      Reabrir
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </li>

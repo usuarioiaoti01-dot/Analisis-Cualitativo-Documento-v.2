@@ -34,6 +34,10 @@ export interface DocumentRecord {
   created_at: number;
   updated_at: number;
   document_type: string;
+  /** Metadatos de la etapa 1 que todavía no se capturan en la carga. */
+  author?: string | null;
+  responsible_unit?: string | null;
+  document_date?: number | null;
   quality_score: number | null;
   severity: Severity | null;
   file_name: string | null;
@@ -63,6 +67,8 @@ export interface CriterionRecord {
   /** Tope de la escala ordinal del criterio. */
   scale_max?: number;
   rule?: string | null;
+  /** 1 cuando el criterio se retiró de la matriz pero conserva resultados históricos. */
+  archived?: 0 | 1;
 }
 
 /** Resultado cualitativo de un criterio. */
@@ -267,4 +273,24 @@ export interface Resumen {
   dimensiones: { dimension: string; promedio: number }[];
   hallazgos: (FindingRecord & { document_title: string })[];
   catalogo: { normas: number; actualizado_en: number | null };
+}
+
+/* ── Etapa 7: informe ──────────────────────────────────────────────────── */
+
+export interface Similitud {
+  compared_id: string;
+  compared_title: string;
+  similarity: number;
+  containment: number;
+  kind: string;
+}
+
+/** Respuesta de `GET /api/documents/[id]/informe`. */
+export interface Informe {
+  document: DocumentRecord;
+  evaluation: (EvaluationRecord & { template_name: string }) | undefined;
+  results: EvaluationResultRecord[];
+  findings: FindingRecord[];
+  similarities: Similitud[];
+  generado_en: number;
 }

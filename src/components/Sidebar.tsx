@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { SectionId } from '@/lib/sections';
 import { SECTIONS } from '@/lib/sections';
+import { USUARIO_ACTUAL } from '@/lib/sesion';
 
 const ICONS = {
   resumen: LayoutGrid,
@@ -95,11 +96,11 @@ export function Sidebar({ active, onSelect, pendingCount }: SidebarProps) {
         className="flex items-center gap-3 bg-sidebar-active px-6 py-4 text-left transition-colors hover:bg-white/10"
       >
         <span className="flex size-9 items-center justify-center rounded-full bg-accent/25 text-sm font-semibold text-accent">
-          MN
+          {USUARIO_ACTUAL.iniciales}
         </span>
         <span className="flex-1">
-          <span className="block text-sm font-medium">Martín Montoya</span>
-          <span className="block text-xs text-sidebar-muted">Administrador</span>
+          <span className="block text-sm font-medium">{USUARIO_ACTUAL.nombre}</span>
+          <span className="block text-xs text-sidebar-muted">{USUARIO_ACTUAL.rol}</span>
         </span>
         <ChevronRight className="size-4 text-sidebar-muted" aria-hidden />
       </button>

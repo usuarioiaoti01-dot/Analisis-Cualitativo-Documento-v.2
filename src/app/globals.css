@@ -43,3 +43,25 @@ body {
   border-radius: 0.875rem;
   box-shadow: 0 1px 2px rgb(18 48 79 / 0.04);
 }
+
+/* El informe de la etapa 7 se imprime o se guarda como PDF desde el navegador. */
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  /* Sin sombras ni fondos de pantalla: gastan tinta y no aportan al expediente. */
+  .card {
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Un hallazgo o una sección no deben quedar partidos entre dos páginas. */
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 18mm 16mm;
+  }
+}

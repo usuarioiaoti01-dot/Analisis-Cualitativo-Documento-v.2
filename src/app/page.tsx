@@ -42,6 +42,8 @@ export default function Page() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const [matrixOpen, setMatrixOpen] = useState(false);
+  /** Matriz que se está modificando; `null` significa que se está creando una. */
+  const [matrizEnEdicion, setMatrizEnEdicion] = useState<TemplateRecord | null>(null);
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
@@ -136,13 +138,36 @@ export default function Page() {
     return partes.join(' ');
   }
 
-  async function createTemplate(payload: {
+  /** Crea la matriz o guarda los cambios de la que se está modificando. */
+  async function guardarMatriz(payload: {
     name: string;
     document_type: string;
     criteria: CriterionRecord[];
   }) {
-    await request('/api/evaluations/templates', { method: 'POST', body: JSON.stringify(payload) });
+    const ruta = matrizEnEdicion
+      ? `/api/evaluations/templates/${matrizEnEdicion.id}`
+      : '/api/evaluations/templates';
+
+    await request(ruta, {
+      method: matrizEnEdicion ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
     await loadEvaluations();
+  }
+
+  /** Devuelve el motivo cuando la matriz no puede eliminarse; `null` si se eliminó. */
+  async function eliminarMatriz(template: TemplateRecord): Promise<string | null> {
+    const response = await fetch(`/api/evaluations/templates/${template.id}`, {
+      method: 'DELETE',
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return (payload as { error?: string }).error ?? 'No fue posible eliminar la matriz.';
+    }
+
+    await loadEvaluations();
+    return null;
   }
 
   async function loadPriorityNorms() {
@@ -198,6 +223,7 @@ export default function Page() {
                   setOpenDocumentId(null);
                   void Promise.all([loadDocuments(), loadEvaluations(), loadResumen()]);
                 }}
+                onChanged={() => void Promise.all([loadDocuments(), loadResumen()])}
               />
             ) : (
               <DocumentosView
@@ -214,7 +240,15 @@ export default function Page() {
               templates={templates}
               motor={motor}
               onRun={runEvaluation}
-              onNewTemplate={() => setMatrixOpen(true)}
+              onNewTemplate={() => {
+                setMatrizEnEdicion(null);
+                setMatrixOpen(true);
+              }}
+              onEditTemplate={(template) => {
+                setMatrizEnEdicion(template);
+                setMatrixOpen(true);
+              }}
+              onDeleteTemplate={eliminarMatriz}
             />
           )}
 
@@ -229,7 +263,16 @@ export default function Page() {
       {uploadOpen && (
         <CargarDocumentoModal onClose={() => setUploadOpen(false)} onSubmit={registerDocument} />
       )}
-      {matrixOpen && <NuevaMatrizModal onClose={() => setMatrixOpen(false)} onSubmit={createTemplate} />}
+      {matrixOpen && (
+        <NuevaMatrizModal
+          // La clave fuerza un modal nuevo al cambiar de matriz, para que el
+          // formulario no conserve los valores de la anterior.
+          key={matrizEnEdicion?.id ?? 'nueva'}
+          matriz={matrizEnEdicion ?? undefined}
+          onClose={() => setMatrixOpen(false)}
+          onSubmit={guardarMatriz}
+        />
+      )}
     </div>
   );
 }

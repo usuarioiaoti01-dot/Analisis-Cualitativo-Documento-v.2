@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { DEFAULT_CRITERIA } from '@/lib/rubric';
-import { DOCUMENT_TYPES, type CriterionRecord } from '@/lib/types';
+import { DOCUMENT_TYPES, type CriterionRecord, type TemplateRecord } from '@/lib/types';
 import { Modal } from './Modal';
 
 interface NuevaMatrizModalProps {
@@ -13,13 +13,21 @@ interface NuevaMatrizModalProps {
     document_type: string;
     criteria: CriterionRecord[];
   }) => Promise<void>;
+  /** Matriz a modificar. Si no se pasa, el modal crea una nueva. */
+  matriz?: TemplateRecord;
 }
 
-export function NuevaMatrizModal({ onClose, onSubmit }: NuevaMatrizModalProps) {
-  const [name, setName] = useState('Matriz general de calidad documental');
-  const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES[0]);
+export function NuevaMatrizModal({ onClose, onSubmit, matriz }: NuevaMatrizModalProps) {
+  const editando = matriz !== undefined;
+
+  const [name, setName] = useState(matriz?.name ?? 'Matriz general de calidad documental');
+  const [documentType, setDocumentType] = useState<string>(
+    matriz?.document_type ?? DOCUMENT_TYPES[0],
+  );
   const [criteria, setCriteria] = useState<CriterionRecord[]>(
-    DEFAULT_CRITERIA.map((criterion) => ({ ...criterion })),
+    // Al modificar se conserva el `id` de cada criterio: es lo que permite
+    // actualizarlos en lugar de recrearlos y perder su historia.
+    (matriz?.criteria ?? DEFAULT_CRITERIA).map((criterion) => ({ ...criterion })),
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,7 +65,7 @@ export function NuevaMatrizModal({ onClose, onSubmit }: NuevaMatrizModalProps) {
   return (
     <Modal
       size="lg"
-      title="Nueva matriz de evaluación"
+      title={editando ? 'Modificar matriz de evaluación' : 'Nueva matriz de evaluación'}
       description="La suma de las ponderaciones debe ser 100%."
       onClose={onClose}
       footer={
@@ -75,7 +83,7 @@ export function NuevaMatrizModal({ onClose, onSubmit }: NuevaMatrizModalProps) {
             disabled={saving}
             className="rounded-lg border border-hairline px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
           >
-            {saving ? 'Guardando…' : 'Guardar matriz'}
+            {saving ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar matriz'}
           </button>
         </>
       }
@@ -121,12 +129,21 @@ export function NuevaMatrizModal({ onClose, onSubmit }: NuevaMatrizModalProps) {
                 aria-label={`Dimensión ${index + 1}`}
                 className="w-40 shrink-0 rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               />
-              <input
-                value={criterion.description}
-                onChange={(event) => updateCriterion(index, { description: event.target.value })}
-                aria-label={`Criterio ${index + 1}`}
-                className="min-w-0 flex-1 rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-brand"
-              />
+              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <input
+                  value={criterion.description}
+                  onChange={(event) => updateCriterion(index, { description: event.target.value })}
+                  aria-label={`Criterio ${index + 1}`}
+                  className="w-full rounded-lg border border-hairline px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                />
+                <input
+                  value={criterion.indicator ?? ''}
+                  onChange={(event) => updateCriterion(index, { indicator: event.target.value })}
+                  placeholder="Pregunta de evaluación (opcional)"
+                  aria-label={`Pregunta de evaluación del criterio ${index + 1}`}
+                  className="w-full rounded-lg border border-hairline px-3 py-1.5 text-xs text-ink-muted outline-none focus:border-brand"
+                />
+              </span>
               <input
                 type="number"
                 min={0}
@@ -152,7 +169,10 @@ export function NuevaMatrizModal({ onClose, onSubmit }: NuevaMatrizModalProps) {
           <button
             type="button"
             onClick={() =>
-              setCriteria((current) => [...current, { dimension: '', description: '', weight: 0 }])
+              setCriteria((current) => [
+                ...current,
+                { dimension: '', description: '', weight: 0, indicator: '', scale_max: 5 },
+              ])
             }
             className="text-sm font-medium text-brand hover:underline"
           >

@@ -13,7 +13,7 @@ etapa. Es la referencia para saber qué está construido y qué no.
 | 4. Evaluación cualitativa | Analiza el contenido contra cada criterio. | 🟢 Operativa — motor con IA que lee el documento y emite hallazgos con evidencia verificada; el provisional se conserva como alternativa |
 | 5. Validación legal y normativa | Contrasta citas contra el catálogo normativo. | 🟢 Operativa — reconoce las citas, las verifica y emite hallazgos con evidencia |
 | 6. Comparación con repositorio | Busca similitudes y versiones previas. | 🟢 Operativa — Jaccard y contención sobre shingles, con fragmentos coincidentes |
-| 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🟡 Parcial — el panel de resumen consolida las cifras; faltan la validación humana de cada hallazgo y la exportación |
+| 7. Informe y decisión | Consolida, permite validación humana y emite el informe. | 🟢 Operativa — decisión por hallazgo, validación de la evaluación e informe imprimible |
 
 ## Las cinco dimensiones
 
@@ -204,6 +204,56 @@ peor que ninguno.
 `GET /api/evaluations` informa en `motor.ia_disponible` si el servidor tiene
 credencial; la interfaz deshabilita el motor con IA y lo advierte cuando no la
 hay.
+
+## Etapa 7 — informe y decisión
+
+El sistema detecta; una persona decide. Esta etapa es la que convierte un
+análisis en un acto administrativo con responsable.
+
+### Decisión sobre cada hallazgo
+
+`PATCH /api/findings/[id]` con `status`: `aceptado`, `descartado`, `subsanado` o
+`pendiente`. Se registra quién decidió y cuándo. Volver a «pendiente» limpia la
+firma, para que no quede como resuelto algo que se reabrió.
+
+### Validación de la evaluación
+
+`POST /api/evaluations/[id]/validar` cierra el ciclo: registra validador, fecha
+y una nota opcional, y el documento pasa a «Conforme».
+
+**No se puede validar con hallazgos pendientes.** Si quedan observaciones sin
+decidir, la conformidad no tendría sustento; la ruta responde 409 diciendo
+cuántas faltan. Tampoco se puede validar dos veces.
+
+### Informe
+
+`GET /api/documents/[id]/informe` consolida documento, evaluación, resultado por
+criterio, hallazgos con su decisión y coincidencias del repositorio. La página
+`/informe/[id]` lo presenta sin la barra lateral ni los controles de la
+aplicación, con estilos de impresión, para guardarlo como PDF y adjuntarlo al
+expediente. Si la evaluación se hizo con el motor provisional, el informe lo
+advierte en su cuerpo: un informe que no dice cómo se calculó su puntaje induce
+a error.
+
+### Quién firma
+
+Mientras no haya autenticación, la identidad sale de `src/lib/sesion.ts`, en un
+único punto. **La trazabilidad es nominal, no verificada**: registra un nombre,
+no prueba quién lo escribió. Incorporar el inicio de sesión es sustituir ese
+módulo.
+
+## Matrices: modificación y eliminación
+
+Una matriz que ya se usó no puede tratarse como un borrador.
+
+- **Modificar** (`PUT /api/evaluations/templates/[id]`): los criterios con `id`
+  se actualizan, los nuevos se crean y los que desaparecen se retiran. Un
+  criterio retirado **que ya fue calificado se archiva, no se borra**: borrarlo
+  dejaría sin explicación los resultados y hallazgos que lo citan. Los
+  archivados no se ofrecen en evaluaciones nuevas, pero siguen apareciendo en
+  las evaluaciones históricas.
+- **Eliminar** (`DELETE /api/evaluations/templates/[id]`): solo si la matriz no
+  se usó en ninguna evaluación. Si se usó, responde 409 e indica desactivarla.
 
 ## Entidades
 

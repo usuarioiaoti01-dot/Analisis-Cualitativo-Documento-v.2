@@ -96,7 +96,11 @@ function createSchema(db: DatabaseSync): void {
       -- Tope de la escala ordinal; 5 significa que el criterio se puntúa de 1 a 5.
       scale_max   INTEGER NOT NULL DEFAULT 5,
       -- Regla opcional en lenguaje natural que acota cuándo se considera cumplido.
-      rule        TEXT
+      rule        TEXT,
+      -- Un criterio retirado de la matriz que ya fue usado en una evaluación no
+      -- se borra: se archiva, para que los resultados históricos sigan siendo
+      -- interpretables.
+      archived    INTEGER NOT NULL DEFAULT 0
     );
 
     -- Etapas 4 a 7: una evaluación es la aplicación de una matriz a un documento.
@@ -236,6 +240,7 @@ function migrateSchema(db: DatabaseSync): void {
     ['indicator', 'TEXT'],
     ['scale_max', 'INTEGER NOT NULL DEFAULT 5'],
     ['rule', 'TEXT'],
+    ['archived', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
 
   addMissingColumns(db, 'evaluations', [

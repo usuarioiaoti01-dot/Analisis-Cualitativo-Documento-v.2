@@ -36,7 +36,7 @@ export function GET() {
 
   const CRITERIA_SQL = `
     SELECT id, dimension, description, weight, indicator, scale_max, rule
-    FROM criteria WHERE template_id = ? ORDER BY position, id`;
+    FROM criteria WHERE template_id = ? AND archived = 0 ORDER BY position, id`;
 
   return NextResponse.json({
     documents,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
   const criterios = queryAll<CriterioParaEvaluar>(
     db,
     `SELECT id, dimension, description, weight, indicator, scale_max, rule
-     FROM criteria WHERE template_id = ? ORDER BY position, id`,
+     FROM criteria WHERE template_id = ? AND archived = 0 ORDER BY position, id`,
     templateId,
   );
   if (criterios.length === 0) {

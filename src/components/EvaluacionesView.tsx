@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Play, Plus, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, Pencil, Play, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import type { TemplateRecord } from '@/lib/types';
 
 export type Motor = 'ai' | 'deterministic';
@@ -13,6 +13,9 @@ interface EvaluacionesViewProps {
   motor: { ia_disponible: boolean; modelo: string } | null;
   onRun: (documentId: string, templateId: number, motor: Motor) => Promise<string>;
   onNewTemplate: () => void;
+  onEditTemplate: (template: TemplateRecord) => void;
+  /** Devuelve un mensaje cuando la matriz no puede eliminarse. */
+  onDeleteTemplate: (template: TemplateRecord) => Promise<string | null>;
 }
 
 export function EvaluacionesView({
@@ -21,12 +24,15 @@ export function EvaluacionesView({
   motor,
   onRun,
   onNewTemplate,
+  onEditTemplate,
+  onDeleteTemplate,
 }: EvaluacionesViewProps) {
   const [documentId, setDocumentId] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorMatriz, setErrorMatriz] = useState<string | null>(null);
 
   const iaDisponible = motor?.ia_disponible ?? false;
   const [engine, setEngine] = useState<Motor>('ai');
@@ -152,6 +158,12 @@ export function EvaluacionesView({
           </button>
         </div>
 
+        {errorMatriz && (
+          <p className="mt-4 rounded-lg bg-sev-high-bg px-4 py-3 text-sm text-sev-high-ink">
+            {errorMatriz}
+          </p>
+        )}
+
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {templates.map((template) => {
             const totalWeight = template.criteria.reduce((acc, criterion) => acc + criterion.weight, 0);
@@ -162,11 +174,32 @@ export function EvaluacionesView({
                   <span className="flex size-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                     <SlidersHorizontal className="size-[18px]" aria-hidden />
                   </span>
-                  {template.active === 1 && (
-                    <span className="rounded-full bg-sev-low-bg px-2.5 py-1 text-xs font-medium text-sev-low-ink">
-                      Activa
-                    </span>
-                  )}
+
+                  <div className="flex items-center gap-1">
+                    {template.active === 1 && (
+                      <span className="rounded-full bg-sev-low-bg px-2.5 py-1 text-xs font-medium text-sev-low-ink">
+                        Activa
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onEditTemplate(template)}
+                      aria-label={`Modificar ${template.name}`}
+                      title="Modificar matriz"
+                      className="rounded-lg p-1.5 text-ink-muted transition-colors hover:text-brand"
+                    >
+                      <Pencil className="size-4" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => setErrorMatriz(await onDeleteTemplate(template))}
+                      aria-label={`Eliminar ${template.name}`}
+                      title="Eliminar matriz"
+                      className="rounded-lg p-1.5 text-ink-muted transition-colors hover:text-sev-high-ink"
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  </div>
                 </div>
 
                 <h3 className="mt-4 font-medium text-ink">{template.name}</h3>
