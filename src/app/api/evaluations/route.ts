@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from '@/lib/db';
 import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
 import { verificarCita, type SeccionUbicable } from '@/lib/evidencia';
+import { textoEvaluable } from '@/lib/tramite';
 import {
   ErrorDeMotor,
   MODELO,
@@ -121,9 +122,22 @@ async function evaluarConMotorIa(
     );
   }
 
+  const secciones = queryAll<SeccionUbicable>(
+    db,
+    `SELECT id, numbering, heading, page_from, char_start, char_end
+     FROM document_sections WHERE document_id = ? ORDER BY ordinal`,
+    documento.id,
+  );
+
+  // La carátula —número, destinatario, remitente, asunto, fecha— no es
+  // contenido evaluable: sin este recorte el motor observa que el nombre del
+  // remitente «no desarrolla su argumento». La evidencia se sigue verificando
+  // contra el texto completo, así que las citas conservan su ubicación real.
+  const evaluable = textoEvaluable(contenido.content, secciones);
+
   let respuesta;
   try {
-    respuesta = await evaluarConIa(contenido.content, criterios, {
+    respuesta = await evaluarConIa(evaluable.texto, criterios, {
       titulo: documento.title,
       tipoDocumental: documento.document_type,
     });
@@ -133,13 +147,6 @@ async function evaluarConMotorIa(
     }
     throw error;
   }
-
-  const secciones = queryAll<SeccionUbicable>(
-    db,
-    `SELECT id, numbering, heading, page_from, char_start, char_end
-     FROM document_sections WHERE document_id = ? ORDER BY ordinal`,
-    documento.id,
-  );
 
   const porId = new Map(criterios.map((criterio) => [criterio.id, criterio]));
 
@@ -234,6 +241,7 @@ async function evaluarConMotorIa(
     score,
     resultados,
     citasDescartadas,
+    seccionesOmitidas: evaluable.omitidas,
     usage: respuesta.usage,
   });
 }
@@ -321,6 +329,8 @@ interface DatosAPersistir {
     }[];
   }[];
   citasDescartadas: number;
+  /** Secciones de carátula que quedaron fuera del análisis. */
+  seccionesOmitidas?: number;
   usage?: { entrada: number; cacheEscrito: number; cacheLeido: number; salida: number };
 }
 
@@ -406,6 +416,7 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
         criterios: datos.resultados.length,
         hallazgos: hallazgosGuardados,
         citas_descartadas: datos.citasDescartadas,
+        secciones_omitidas: datos.seccionesOmitidas ?? 0,
         ...(datos.usage ? { tokens: datos.usage } : {}),
       },
     },

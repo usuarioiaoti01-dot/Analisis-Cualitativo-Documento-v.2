@@ -139,6 +139,11 @@ export interface SectionRecord {
   page_to: number | null;
   char_start: number;
   char_end: number;
+  /**
+   * «tramite» para la carátula del documento —número, destinatario, asunto,
+   * fecha—, que se muestra pero no se evalúa; «cuerpo» para el resto.
+   */
+  role?: 'tramite' | 'cuerpo';
 }
 
 /** Resultado de un criterio dentro de una evaluación. */

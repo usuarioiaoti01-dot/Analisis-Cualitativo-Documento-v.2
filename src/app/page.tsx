@@ -117,7 +117,12 @@ export default function Page() {
   async function runEvaluation(documentId: string, templateId: number, engine: Motor) {
     const data = await request<{
       evaluation: { score: number | null; engine: string };
-      resumen: { criterios: number; hallazgos: number; citas_descartadas: number };
+      resumen: {
+        criterios: number;
+        hallazgos: number;
+        citas_descartadas: number;
+        secciones_omitidas?: number;
+      };
     }>('/api/evaluations', {
       method: 'POST',
       body: JSON.stringify({ document_id: documentId, template_id: templateId, engine }),
@@ -130,6 +135,11 @@ export default function Page() {
       `Puntaje ${evaluation.score ?? '—'}/100 sobre ${resumen.criterios} criterios.`,
       `${resumen.hallazgos} hallazgo(s) con evidencia verificada.`,
     ];
+    if (resumen.secciones_omitidas) {
+      partes.push(
+        `Se excluyó la carátula del documento: ${resumen.secciones_omitidas} sección(es) de trámite.`,
+      );
+    }
     if (resumen.citas_descartadas > 0) {
       partes.push(
         `${resumen.citas_descartadas} hallazgo(s) se descartaron porque su cita no se encontró en el documento.`,

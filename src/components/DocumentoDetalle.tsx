@@ -534,6 +534,7 @@ function Secciones({ sections }: { sections: SectionRecord[] }) {
   }
 
   const todasAbiertas = abiertas.size === sections.length;
+  const deTramite = sections.filter((seccion) => seccion.role === 'tramite').length;
 
   return (
     <div>
@@ -541,6 +542,9 @@ function Secciones({ sections }: { sections: SectionRecord[] }) {
         <p className="text-sm text-ink-muted">
           {raices.length} {raices.length === 1 ? 'sección' : 'secciones'} de primer nivel
           {sections.length > raices.length && ` · ${sections.length} en total`}
+          {deTramite > 0 && (
+            <span className="text-ink-muted"> · {deTramite} de trámite, fuera del análisis</span>
+          )}
         </p>
         <button
           type="button"
@@ -619,11 +623,24 @@ function SeccionEnArbol({
         <button
           type="button"
           onClick={() => desplegable && onAlternar(seccion.id)}
-          className="min-w-0 flex-1 truncate text-left font-medium text-ink"
+          className={`min-w-0 flex-1 truncate text-left font-medium ${
+            seccion.role === 'tramite' ? 'text-ink-muted' : 'text-ink'
+          }`}
           title={seccion.heading}
         >
           {seccion.heading}
         </button>
+
+        {/* La carátula del documento se muestra, pero el motor no la evalúa:
+            conviene que el revisor sepa qué se dejó fuera y por qué. */}
+        {seccion.role === 'tramite' && (
+          <span
+            className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-muted"
+            title="Carátula del documento: no se incluye en el análisis."
+          >
+            trámite
+          </span>
+        )}
 
         {hijos.length > 0 && (
           <span className="shrink-0 text-xs text-ink-muted">{hijos.length} num.</span>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { queryAll, queryOne } from '@/lib/sqlite';
 import { borrarArchivo } from '@/lib/almacen';
+import { clasificarSecciones } from '@/lib/tramite';
 import type {
   DocumentDetail,
   EvaluationRecord,
@@ -33,7 +34,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   // El listado solo necesita un extracto: el cuerpo completo de cada sección
   // duplicaría el texto del documento, que ya viaja una vez en `content`.
-  const sections = queryAll<SectionRecord>(
+  const filas = queryAll<SectionRecord>(
     db,
     `SELECT id, document_id, ordinal, numbering, level, parent_id, heading,
             substr(content, 1, 400) AS content, length(content) AS content_length,
@@ -41,6 +42,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
      FROM document_sections WHERE document_id = ? ORDER BY ordinal`,
     id,
   );
+
+  // El rol se deduce aquí y no se guarda: así vale también para los documentos
+  // cargados antes de que la distinción existiera, sin volver a segmentarlos.
+  const roles = clasificarSecciones(filas);
+  const sections = filas.map((fila, indice) => ({ ...fila, role: roles[indice] }));
 
   const evaluations = queryAll<EvaluationRecord>(
     db,

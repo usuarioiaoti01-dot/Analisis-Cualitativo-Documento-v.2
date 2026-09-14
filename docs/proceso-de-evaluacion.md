@@ -221,9 +221,31 @@ que superan el umbral: saber que un documento se comparó y quedó en 2% es tan
 
 ## Etapa 4 — evaluación cualitativa
 
-`POST /api/evaluations` con `engine: 'ai'` envía el texto íntegro del documento y
-la matriz a la API de Anthropic, y obtiene un resultado por criterio con sus
+`POST /api/evaluations` con `engine: 'ai'` envía el cuerpo del documento y la
+matriz a la API de Anthropic, y obtiene un resultado por criterio con sus
 hallazgos. Es la única etapa que saca el texto del perímetro de la entidad.
+
+### Qué se evalúa y qué no: la carátula queda fuera
+
+Un memorando empieza con su número, el destinatario, el remitente, el asunto y
+la fecha. La segmentación las reconoce como secciones porque lo parecen, pero no
+son contenido evaluable: sin recortarlas, el motor acaba observando que el
+nombre del remitente «no desarrolla su argumento» y el puntaje baja por la
+carátula.
+
+`src/lib/tramite.ts` separa ese bloque. Solo puede ser trámite lo que está
+**antes** de la primera sección de cuerpo, y la corrida se detiene en cuanto
+aparece un título conocido (`ANTECEDENTES`, `BASE LEGAL`, `OBJETO`…), una
+sección numerada o un encabezado largo. Si todo pareciera carátula, no se
+recorta nada: es preferible analizar de más que no analizar nada.
+
+El rol se deduce al leer y no se guarda en la base, de modo que vale también
+para los documentos cargados antes de que la distinción existiera. La ficha
+marca cada sección de carátula con la etiqueta «trámite», y la respuesta de la
+evaluación informa cuántas se omitieron en `resumen.secciones_omitidas`.
+
+La verificación de evidencia sigue corriendo contra el **texto completo**, así
+que las citas conservan su ubicación real en el documento.
 
 **Modelo:** `claude-opus-5` (configurable con `SACD_MODELO`), con razonamiento
 adaptativo y salida estructurada por esquema JSON, de modo que la respuesta trae
