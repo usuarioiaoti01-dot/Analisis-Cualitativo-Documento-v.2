@@ -44,7 +44,9 @@ const TIPOS: { etiqueta: string; patron: string }[] = [
   { etiqueta: 'Decreto Supremo', patron: 'Decreto\\s+Supremo|D\\.?\\s?S\\.?' },
   { etiqueta: 'Decreto Legislativo', patron: 'Decreto\\s+Legislativo|D\\.?\\s?L\\.?' },
   { etiqueta: 'Decreto de Urgencia', patron: 'Decreto\\s+de\\s+Urgencia|D\\.?\\s?U\\.?' },
-  { etiqueta: 'Directiva', patron: 'Directiva' },
+  // «DI» es como abrevian «Directiva» el MIDAGRI y otras entidades; se exige
+  // que la siga la marca de número para que no capture cualquier «di» suelto.
+  { etiqueta: 'Directiva', patron: 'Directiva|D\\.?\\s?I\\.?(?=\\s*N)' },
   { etiqueta: 'Ley', patron: 'Ley' },
 ];
 
@@ -58,7 +60,7 @@ const TIPOS: { etiqueta: string; patron: string }[] = [
  * parte el correlativo en dos: «004-2019-» al final de un renglón y «JUS» al
  * comienzo del siguiente.
  */
-const NUMERO = '([A-Z]{0,2}\\d{3,6}(?:-\\s?[A-Za-zÑÁÉÍÓÚ0-9]+)*(?:\\s?/\\s?[A-Za-zÑ0-9]+)?)';
+const NUMERO = '([A-Z]{0,2}\\d{3,6}(?:[-/]\\s?[A-Za-zÑÁÉÍÓÚ0-9]+)*)';
 
 /** Marca opcional de número: «N°», «N.º», «Nº», «No.» o nada. */
 const MARCA_NUMERO = '(?:\\s*N\\s*[.°ºo]{0,2}\\s*)?';
@@ -139,16 +141,36 @@ export function extraerCitas(texto: string): Cita[] {
 /**
  * Deduce la clave de una norma del catálogo aplicándole el mismo reconocimiento
  * que al texto del documento. Así ambos lados se normalizan igual.
+ *
+ * Solo indexa las entradas cuyo código **es** una norma. Una ficha titulada
+ * «Fe de erratas de Ley N.º 32069» contiene una cita pero no es esa norma:
+ * indexarla por ella haría que cualquier documento que cite la Ley 32069
+ * quedara emparejado con su fe de erratas.
  */
 export function clavesDeNorma(code: string, aliases: string | null): string[] {
   const fuentes = [code, ...(aliases ? aliases.split('|') : [])];
   const claves = new Set<string>();
 
   for (const fuente of fuentes) {
-    for (const cita of extraerCitas(fuente)) claves.add(cita.clave);
+    const clave = claveSiEsCodigoPuro(fuente);
+    if (clave) claves.add(clave);
   }
 
   return [...claves];
+}
+
+/** Clave de la cadena solo cuando esta es, entera, un código de norma. */
+function claveSiEsCodigoPuro(fuente: string): string | null {
+  const limpio = fuente.trim();
+  if (limpio.length === 0) return null;
+
+  const cita = extraerCitas(limpio)[0];
+  if (!cita || cita.indice !== 0) return null;
+
+  // La cita debe abarcar prácticamente toda la cadena; se toleran los signos
+  // de cierre que a veces la acompañan.
+  const resto = limpio.slice(cita.textoCitado.length).trim();
+  return resto.length <= 2 ? cita.clave : null;
 }
 
 /**

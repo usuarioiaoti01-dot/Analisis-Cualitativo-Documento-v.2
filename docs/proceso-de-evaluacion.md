@@ -165,6 +165,24 @@ archivo y distingue la norma propia de las referidas. Lo que devuelve **se
 normaliza con el mismo extractor de citas** que usa la validación normativa: si
 el extractor no lo reconoce, tampoco lo emparejaría después, así que se rechaza.
 
+### Documentos que complementan una norma
+
+Una fe de erratas, una modificatoria o un anexo no tienen código propio. Al
+pedirles «su» código se obtenía el de la norma madre, el catálogo los rechazaba
+como duplicados y se perdían sin que nadie lo notara. Ahora el modelo declara la
+naturaleza del documento y, cuando es un complemento, se le da un código
+compuesto —«Fe de erratas de Ley N.º 32069»— que lo distingue.
+
+Ese código compuesto **contiene** una cita pero **no es** esa norma, así que
+`clavesDeNorma` solo indexa las entradas cuyo código es, entero, un código de
+norma. Sin esa regla, un documento que citara la Ley 32069 habría quedado
+emparejado con su fe de erratas.
+
+**Límite conocido:** un extracto cuyas primeras páginas reproducen el texto de
+la norma —«Modificaciones (Parte 1) – Reglamento de la Ley 32069»— se identifica
+como la norma misma y se rechaza por duplicado. El informe de carga lo dice, así
+que no se pierde en silencio, pero hay que incorporarlo a mano.
+
 Los duplicados se detectan por la clave normalizada, no por el texto: un archivo
 de la directiva de firma digital se reconoció como ya presente en el catálogo
 pese a llamarse de otro modo.

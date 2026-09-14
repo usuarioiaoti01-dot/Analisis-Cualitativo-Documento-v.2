@@ -1,7 +1,17 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { BookOpen, Check, Pencil, Search, Trash2, Upload, X } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import type { NormRecord, ResultadoIncorporacion } from '@/lib/types';
 
 const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
@@ -12,6 +22,16 @@ const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
 };
 
 const ACEPTADOS = '.pdf,.docx,.xlsx';
+
+/** Normas por página. Un catálogo de decenas de normas no se navega en una lista única. */
+const POR_PAGINA = 12;
+
+const ESTADO_ETIQUETA: Record<ResultadoIncorporacion['estado'], string> = {
+  incorporada: 'incorporada(s)',
+  duplicada: 'ya estaban',
+  sin_identificar: 'sin identificar',
+  error: 'con error',
+};
 
 interface CatalogoViewProps {
   norms: NormRecord[];
@@ -27,6 +47,8 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
   const [resultados, setResultados] = useState<ResultadoIncorporacion[] | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [editando, setEditando] = useState<number | null>(null);
+  const [pagina, setPagina] = useState(0);
+  const [informeAbierto, setInformeAbierto] = useState(false);
 
   const encontradas = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -37,6 +59,19 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
       ),
     );
   }, [norms, query]);
+
+  const totalPaginas = Math.max(1, Math.ceil(encontradas.length / POR_PAGINA));
+  // Al filtrar, la página actual puede quedar fuera de rango.
+  const paginaActual = Math.min(pagina, totalPaginas - 1);
+  const visibles = encontradas.slice(paginaActual * POR_PAGINA, (paginaActual + 1) * POR_PAGINA);
+
+  /** Resumen del último informe de carga, para no obligar a leerlo entero. */
+  const conteoResultados = useMemo(() => {
+    if (!resultados) return null;
+    const conteo: Partial<Record<ResultadoIncorporacion['estado'], number>> = {};
+    for (const r of resultados) conteo[r.estado] = (conteo[r.estado] ?? 0) + 1;
+    return conteo;
+  }, [resultados]);
 
   /** Sube uno o varios archivos; cada uno se informa por separado. */
   async function incorporar(archivos: FileList | null) {
@@ -58,6 +93,9 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
       }
 
       setResultados(payload.resultados);
+      // Un informe de treinta archivos no debe empujar la lista fuera de la vista.
+      setInformeAbierto(payload.resultados.length <= 5);
+      setPagina(0);
       await onRecargar();
     } finally {
       setCargando(false);
@@ -136,17 +174,50 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
         </div>
       </div>
 
-      {resultados && (
-        <ul className="mt-5 space-y-1 rounded-lg border border-hairline p-4 text-sm">
-          {resultados.map((resultado) => (
-            <li key={resultado.archivo} className="flex flex-wrap gap-x-2">
-              <span className={`font-medium ${ESTADO_TONE[resultado.estado]}`}>
-                {resultado.norma?.code ?? resultado.archivo}
+      {resultados && conteoResultados && (
+        <div className="mt-5 rounded-lg border border-hairline">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <p className="text-sm">
+              <strong className="text-ink">{resultados.length} archivo(s)</strong>
+              <span className="text-ink-muted">
+                {' · '}
+                {(Object.keys(conteoResultados) as ResultadoIncorporacion['estado'][])
+                  .map((estado) => `${conteoResultados[estado]} ${ESTADO_ETIQUETA[estado]}`)
+                  .join(' · ')}
               </span>
-              <span className="text-ink-muted">— {resultado.detalle}</span>
-            </li>
-          ))}
-        </ul>
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setInformeAbierto((valor) => !valor)}
+                className="text-sm font-medium text-brand hover:underline"
+              >
+                {informeAbierto ? 'Ocultar detalle' : 'Ver detalle'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setResultados(null)}
+                aria-label="Cerrar el informe de carga"
+                className="text-ink-muted hover:text-ink"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+
+          {informeAbierto && (
+            <ul className="max-h-64 space-y-1 overflow-y-auto border-t border-hairline px-4 py-3 text-sm">
+              {resultados.map((resultado) => (
+                <li key={resultado.archivo} className="flex flex-wrap gap-x-2">
+                  <span className={`font-medium ${ESTADO_TONE[resultado.estado]}`}>
+                    {resultado.norma?.code ?? resultado.archivo}
+                  </span>
+                  <span className="text-ink-muted">— {resultado.detalle}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {aviso && (
@@ -160,7 +231,10 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
         <input
           type="search"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setPagina(0);
+          }}
           placeholder="Buscar por norma, materia o entidad"
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
         />
@@ -172,7 +246,7 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
         </p>
       ) : (
         <ul className="mt-4 divide-y divide-hairline">
-          {encontradas.map((norm) =>
+          {visibles.map((norm) =>
             editando === norm.id ? (
               <FilaEditable
                 key={norm.id}
@@ -196,6 +270,38 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
             </li>
           )}
         </ul>
+      )}
+
+      {totalPaginas > 1 && (
+        <div className="mt-4 flex items-center justify-between border-t border-hairline pt-4">
+          <p className="text-sm text-ink-muted">
+            {paginaActual * POR_PAGINA + 1}–
+            {Math.min((paginaActual + 1) * POR_PAGINA, encontradas.length)} de {encontradas.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPagina(paginaActual - 1)}
+              disabled={paginaActual === 0}
+              className="flex items-center gap-1 rounded-lg border border-hairline px-3 py-1.5 text-sm text-ink transition-colors hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+              Anterior
+            </button>
+            <span className="text-sm text-ink-muted">
+              {paginaActual + 1} / {totalPaginas}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPagina(paginaActual + 1)}
+              disabled={paginaActual >= totalPaginas - 1}
+              className="flex items-center gap-1 rounded-lg border border-hairline px-3 py-1.5 text-sm text-ink transition-colors hover:border-brand hover:text-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Siguiente
+              <ChevronRight className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
       )}
     </section>
   );

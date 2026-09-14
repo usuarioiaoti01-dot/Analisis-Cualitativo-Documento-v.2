@@ -21,6 +21,12 @@ import { MODELO, hayCredenciales } from './motor-ia';
  * (`citas.ts`), de modo que una norma incorporada aquí se reconozca después en
  * el texto de un documento evaluado.
  *
+ * El segundo problema son los documentos que **complementan** una norma sin
+ * tener código propio: una fe de erratas, una modificatoria, un anexo. Pedirles
+ * «su» código devolvía el de la norma madre, y entonces el catálogo los
+ * rechazaba como duplicados y se perdían sin que nadie lo notara. Se les da un
+ * código compuesto que los distingue de la norma que complementan.
+ *
  * Sin credencial se cae al nombre del archivo —que en los repositorios
  * institucionales suele contener el código propio— y el resultado se marca
  * para revisión.
@@ -37,6 +43,13 @@ export interface MetadatosNorma {
 
 /** Caracteres del inicio del documento que bastan para identificarlo. */
 const VENTANA = 4000;
+
+/** Cómo se nombra un documento que complementa a otra norma sin código propio. */
+const ETIQUETA_COMPLEMENTO: Record<string, string> = {
+  modificatoria: 'Modificatoria',
+  fe_de_erratas: 'Fe de erratas',
+  anexo: 'Anexo',
+};
 
 export async function detectarMetadatos(
   texto: string,
@@ -96,14 +109,29 @@ const ESQUEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['code', 'title', 'issuer', 'subject'],
+    required: ['naturaleza', 'code_propio', 'code_referido', 'title', 'issuer', 'subject'],
     properties: {
-      code: {
+      naturaleza: {
+        type: 'string',
+        enum: ['norma', 'modificatoria', 'fe_de_erratas', 'anexo', 'otro'],
+        description:
+          'Qué es el documento. «norma» si se sostiene por sí mismo, aunque reglamente a otra ' +
+          '(un reglamento aprobado por decreto supremo es una norma). «modificatoria», ' +
+          '«fe_de_erratas» o «anexo» si solo complementa a otra norma. «otro» para lineamientos, ' +
+          'estrategias, manuales o políticas sin código de norma.',
+      },
+      code_propio: {
         type: 'string',
         description:
-          'Código de la norma que ES este documento, no de las que cita. Un reglamento se ' +
-          'identifica por su propio decreto supremo, no por la ley que reglamenta. Formato: ' +
-          '«Decreto Supremo N° 115-2025-PCM», «Directiva N° 001-2025-PCM/SGTD», «Ley N° 29763».',
+          'Código del PROPIO documento, no de las normas que cita. Cadena vacía si el documento ' +
+          'no tiene uno. Formato: «Decreto Supremo N° 115-2025-PCM», «Ley N° 29763», ' +
+          '«Directiva N° 0031-2026-MIDAGRI-SG-OACID».',
+      },
+      code_referido: {
+        type: 'string',
+        description:
+          'Código de la norma que este documento modifica, corrige o complementa. Cadena vacía ' +
+          'si no aplica.',
       },
       title: {
         type: 'string',
@@ -131,7 +159,9 @@ async function pedirAlModelo(
 
     const respuesta = await client.messages.create({
       model: MODELO,
-      max_tokens: 1000,
+      // Holgado a propósito: el razonamiento adaptativo consume de este mismo
+      // presupuesto, y con 1000 la respuesta se cortaba a medio JSON.
+      max_tokens: 8000,
       system: [
         'Identificas normas legales peruanas. Respondes solo con los datos que aparecen en el',
         'texto; no inventas ni completas con conocimiento externo.',
@@ -140,7 +170,8 @@ async function pedirAlModelo(
         'documento CITA. El encabezado de una norma peruana suele nombrar primero las normas',
         'que la sustentan o que reglamenta; ninguna de esas es su código.',
       ].join('\n'),
-      output_config: { format: ESQUEMA },
+      // Identificar una ficha no requiere deliberación: esfuerzo bajo.
+      output_config: { effort: 'low', format: ESQUEMA },
       messages: [
         {
           role: 'user',
@@ -155,6 +186,10 @@ async function pedirAlModelo(
     });
 
     if (respuesta.stop_reason === 'refusal') return null;
+    if (respuesta.stop_reason === 'max_tokens') {
+      console.warn(`[catálogo] La identificación de «${fileName}» se cortó por longitud.`);
+      return null;
+    }
 
     const texto = respuesta.content
       .filter((bloque): bloque is Anthropic.TextBlock => bloque.type === 'text')
@@ -162,27 +197,48 @@ async function pedirAlModelo(
       .join('');
 
     const datos = JSON.parse(texto) as {
-      code?: string;
+      naturaleza?: string;
+      code_propio?: string;
+      code_referido?: string;
       title?: string;
       issuer?: string;
       subject?: string;
     };
-    if (!datos.code || !datos.title) return null;
+    console.log('[diag]', fileName.slice(0,40), JSON.stringify(datos));
+    if (!datos.title) return null;
 
     // El código debe pasar por el extractor de citas: si este no lo reconoce,
     // la etapa 5 tampoco lo emparejaría con las citas de un documento.
-    const code = normalizarCodigo(datos.code);
-    if (!code) return null;
+    const propio = datos.code_propio ? normalizarCodigo(datos.code_propio) : null;
+    const referido = datos.code_referido ? normalizarCodigo(datos.code_referido) : null;
 
-    return {
-      code,
+    const base = {
       title: datos.title.trim(),
       issuer: (datos.issuer ?? 'Por determinar').trim(),
       subject: (datos.subject ?? 'Por determinar').trim(),
-      requiereRevision: false,
     };
-  } catch {
-    // Si el modelo no responde, la heurística se hace cargo.
+
+    if (propio) {
+      return { ...base, code: propio, requiereRevision: false };
+    }
+
+    // Sin código propio pero con norma madre: es un complemento. Se le da un
+    // código que lo distinga, para que no se confunda con la norma que
+    // complementa ni se descarte como duplicado suyo.
+    const etiqueta = ETIQUETA_COMPLEMENTO[datos.naturaleza ?? ''];
+    if (etiqueta && referido) {
+      return { ...base, code: `${etiqueta} de ${referido}`, requiereRevision: true };
+    }
+
+    return null;
+  } catch (error) {
+    // La heurística se hace cargo, pero el motivo se registra: una degradación
+    // silenciosa hace parecer que la identificación «funciona mal» cuando en
+    // realidad nunca llegó a consultarse al modelo.
+    console.warn(
+      `[catálogo] No se pudo identificar «${fileName}» con el modelo:`,
+      error instanceof Error ? error.message : error,
+    );
     return null;
   }
 }

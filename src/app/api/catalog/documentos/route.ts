@@ -104,13 +104,22 @@ async function incorporar(
 
   // Se compara por la clave normalizada del extractor, no por el texto: así
   // «Ley N° 29763» y «Ley N.º 29763» se reconocen como la misma norma.
+  //
+  // Los complementos —fe de erratas, modificatorias, anexos— llevan un código
+  // compuesto que no es una norma, así que no tienen clave: se comparan por su
+  // texto, que ya incluye la norma a la que acompañan.
   const claves = new Set(clavesDeNorma(metadatos.code, null));
   const existentes = db
     .prepare('SELECT id, code, aliases FROM norms')
     .all() as { id: number; code: string; aliases: string | null }[];
 
   for (const norma of existentes) {
-    if (clavesDeNorma(norma.code, norma.aliases).some((clave) => claves.has(clave))) {
+    const coincide =
+      claves.size > 0
+        ? clavesDeNorma(norma.code, norma.aliases).some((clave) => claves.has(clave))
+        : norma.code.trim().toLowerCase() === metadatos.code.trim().toLowerCase();
+
+    if (coincide) {
       return {
         ...base,
         estado: 'duplicada',
