@@ -205,6 +205,34 @@ instrucciones o en el texto extraído.
 Lo que se guarda es el texto **del documento**, no el que devolvió el motor, y la
 ubicación se resuelve contra las secciones de la etapa 3.
 
+### El esquema de salida es restringido
+
+La salida estructurada de la API admite un subconjunto de JSON Schema. Dos
+límites que costaron un 400 cada uno:
+
+- `minItems` solo acepta 0 o 1, así que **no se puede exigir por esquema** que
+  vengan tantos resultados como criterios. Se pide en las instrucciones y se
+  comprueba al recibir: una matriz respondida a medias se rechaza, porque su
+  puntaje se habría calculado sobre menos criterios de los aprobados y se vería
+  igual de válido que uno completo.
+- `minimum` y `maximum` no se admiten en enteros. El rango de la escala se
+  declara en la descripción y `normalizarPuntaje` lo recorta al recibirlo.
+
+### El puntaje no es reproducible
+
+Dos corridas del mismo documento con la misma matriz dieron **66 y 59**. La
+causa es el razonamiento adaptativo del modelo, y los parámetros de muestreo
+—`temperature` y equivalentes— ya no existen en esta generación de modelos: no
+hay forma de fijarlo.
+
+Lo que sí resultó estable en la prueba fueron los hallazgos de fondo: ambas
+corridas señalaron la ausencia de disposiciones de vigencia y derogación, la
+cita genérica del ROF sin artículo habilitante y la falta de sustento técnico.
+
+De ahí que **el puntaje sea indicativo y la conformidad sea humana**. Un número
+que varía siete puntos entre corridas no puede sustentar por sí solo una
+decisión administrativa; los hallazgos con su evidencia, sí.
+
 ### Otras decisiones
 
 - Un criterio `no_aplica` sale del denominador del puntaje: castigar al documento

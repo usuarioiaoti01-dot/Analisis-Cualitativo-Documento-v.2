@@ -50,7 +50,13 @@ export interface ResultadoDelModelo {
 
 export interface RespuestaDelMotor {
   resultados: ResultadoDelModelo[];
-  usage: { entrada: number; salida: number; cacheLeido: number };
+  usage: {
+    entrada: number;
+    /** Tokens escritos en caché: la primera vez, el documento entero pasa por aquí. */
+    cacheEscrito: number;
+    cacheLeido: number;
+    salida: number;
+  };
 }
 
 /** Error con un mensaje pensado para mostrarse al usuario tal cual. */
@@ -77,8 +83,9 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
       properties: {
         resultados: {
           type: 'array',
-          minItems: criterios.length,
-          maxItems: criterios.length,
+          // La API no admite `minItems` distinto de 0 o 1, así que la
+          // completitud no puede exigirse por esquema: se pide en las
+          // instrucciones y se comprueba al recibir la respuesta.
           items: {
             type: 'object',
             additionalProperties: false,
@@ -93,10 +100,13 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
                 enum: ['cumple', 'parcial', 'no_cumple', 'no_aplica'],
               },
               puntaje: {
+                // La salida estructurada no admite `minimum`/`maximum`: el
+                // rango se pide en la descripción y `normalizarPuntaje` lo
+                // recorta al recibir la respuesta.
                 type: ['integer', 'null'],
-                minimum: 1,
-                maximum: escalaMaxima,
-                description: 'Puntaje en la escala del criterio. Nulo solo si el resultado es no_aplica.',
+                description:
+                  `Puntaje entero de 1 a ${escalaMaxima} en la escala del criterio. ` +
+                  'Nulo solo si el resultado es no_aplica.',
               },
               comentario: {
                 type: 'string',
@@ -228,7 +238,8 @@ export async function evaluarConIa(
 
   const instruccion = [
     'Evalúa el documento anterior contra los siguientes criterios.',
-    'Devuelve exactamente un resultado por cada criterio_id listado.',
+    `Devuelve exactamente ${criterios.length} resultados: uno por cada criterio_id listado,`,
+    'sin omitir ninguno y sin repetir ninguno.',
     '',
     describirCriterios(criterios),
   ].join('\n');
@@ -300,9 +311,12 @@ export async function evaluarConIa(
     return {
       resultados: datos.resultados,
       usage: {
+        // `input_tokens` excluye lo que fue a caché; sin sumar la escritura, el
+        // consumo informado de un documento extenso parece ridículamente bajo.
         entrada: respuesta.usage.input_tokens,
-        salida: respuesta.usage.output_tokens,
+        cacheEscrito: respuesta.usage.cache_creation_input_tokens ?? 0,
         cacheLeido: respuesta.usage.cache_read_input_tokens ?? 0,
+        salida: respuesta.usage.output_tokens,
       },
     };
   } catch (error) {

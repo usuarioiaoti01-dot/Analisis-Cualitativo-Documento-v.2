@@ -198,9 +198,20 @@ async function evaluarConMotorIa(
     });
   }
 
-  if (resultados.length === 0) {
+  // Una matriz respondida a medias daria un puntaje sobre menos criterios de
+  // los aprobados, y se veria igual de valido que uno completo. Se rechaza.
+  if (resultados.length !== criterios.length) {
+    const faltantes = criterios
+      .filter((criterio) => !resultados.some((r) => r.criterio.id === criterio.id))
+      .map((criterio) => criterio.description);
+
     return NextResponse.json(
-      { error: 'El motor no devolvió ningún resultado utilizable.' },
+      {
+        error:
+          `El motor devolvió ${resultados.length} de ${criterios.length} criterios. ` +
+          'La evaluación no se guarda porque el puntaje se habría calculado sobre una matriz ' +
+          `incompleta. Sin responder: ${faltantes.join('; ')}.`,
+      },
       { status: 502 },
     );
   }
@@ -310,7 +321,7 @@ interface DatosAPersistir {
     }[];
   }[];
   citasDescartadas: number;
-  usage?: { entrada: number; salida: number; cacheLeido: number };
+  usage?: { entrada: number; cacheEscrito: number; cacheLeido: number; salida: number };
 }
 
 function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
