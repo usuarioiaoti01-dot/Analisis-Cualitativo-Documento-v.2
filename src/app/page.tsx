@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CargarDocumentoModal } from '@/components/CargarDocumentoModal';
 import { CatalogoView } from '@/components/CatalogoView';
+import { DocumentoDetalle } from '@/components/DocumentoDetalle';
 import { DocumentosView } from '@/components/DocumentosView';
 import { EvaluacionesView } from '@/components/EvaluacionesView';
 import { ModuloPendiente } from '@/components/ModuloPendiente';
@@ -15,9 +16,12 @@ import type { CriterionRecord, DocumentRecord, NormRecord, TemplateRecord } from
 
 /** Lanza un error legible cuando la ruta de API responde con un estado no exitoso. */
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
+  // `FormData` fija su propio Content-Type con el delimitador; no hay que tocarlo.
+  const isJson = init?.body !== undefined && !(init.body instanceof FormData);
+
   const response = await fetch(input, {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: isJson ? { 'Content-Type': 'application/json' } : undefined,
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -30,6 +34,7 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 export default function Page() {
   const [section, setSection] = useState<SectionId>('resumen');
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const [matrixOpen, setMatrixOpen] = useState(false);
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -68,13 +73,21 @@ export default function Page() {
     void loadCatalog();
   }, [loadDocuments, loadEvaluations, loadCatalog]);
 
-  async function registerDocument(title: string, documentType: string) {
-    await request('/api/documents', {
+  /** Sube el archivo; el servidor lo almacena, extrae su texto y devuelve la ficha. */
+  async function registerDocument(file: File, documentType: string) {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('document_type', documentType);
+
+    const { document } = await request<{ document: DocumentRecord }>('/api/documents', {
       method: 'POST',
-      body: JSON.stringify({ title, document_type: documentType }),
+      body: form,
     });
+
     await Promise.all([loadDocuments(), loadEvaluations()]);
     setSection('documentos');
+    // Abrir el detalle deja a la vista el texto que se acaba de extraer.
+    setOpenDocumentId(document.id);
   }
 
   async function runEvaluation(documentId: string, templateId: number) {
@@ -105,7 +118,14 @@ export default function Page() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar active={section} onSelect={setSection} pendingCount={pendingCount} />
+      <Sidebar
+        active={section}
+        onSelect={(next) => {
+          setOpenDocumentId(null);
+          setSection(next);
+        }}
+        pendingCount={pendingCount}
+      />
 
       <main className="min-w-0 flex-1 px-8 py-7">
         <TopBar
@@ -122,13 +142,20 @@ export default function Page() {
             />
           )}
 
-          {section === 'documentos' && (
-            <DocumentosView
-              documents={documents}
-              loading={documentsLoading}
-              onRegister={() => setUploadOpen(true)}
-            />
-          )}
+          {section === 'documentos' &&
+            (openDocumentId ? (
+              <DocumentoDetalle
+                documentId={openDocumentId}
+                onBack={() => setOpenDocumentId(null)}
+              />
+            ) : (
+              <DocumentosView
+                documents={documents}
+                loading={documentsLoading}
+                onRegister={() => setUploadOpen(true)}
+                onOpen={setOpenDocumentId}
+              />
+            ))}
 
           {section === 'evaluaciones' && (
             <EvaluacionesView

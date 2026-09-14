@@ -41,7 +41,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | Sección | Estado |
 |---|---|
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos. Los valores son de demostración (ver `src/lib/demo.ts`). |
-| **Documentos** | Repositorio documental persistido. Registro y listado operativos. |
+| **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Ejecución de evaluaciones y administración de matrices de criterios. Operativo. |
 | **Catálogo normativo** | Catálogo persistido, con carga de las 10 referencias prioritarias del inventario interno. |
 | **Usuarios y roles** | Marcador; sin implementación. |
@@ -54,7 +54,10 @@ Todas las rutas responden JSON.
 | Método y ruta | Descripción |
 |---|---|
 | `GET /api/documents` | Lista el repositorio documental. |
-| `POST /api/documents` | Registra un documento. Cuerpo: `{ title, document_type }`. |
+| `POST /api/documents` | Registra un documento. Con `multipart/form-data` (`file`, `document_type`) guarda el archivo y extrae su texto; con JSON (`{ title, document_type }`) registra solo la ficha. |
+| `GET /api/documents/[id]` | Ficha del documento con su texto extraído. |
+| `DELETE /api/documents/[id]` | Elimina el documento, su texto y el archivo original. |
+| `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
 | `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id }`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
@@ -78,20 +81,42 @@ reproducible y verificable. El umbral de estados es:
 Sustituir `computeScore` en `src/app/api/evaluations/route.ts` por el motor real
 es el siguiente paso; el resto del flujo no necesita cambios.
 
+## Carga y extracción de texto
+
+El cargador acepta **PDF, DOCX y XLSX** hasta 25 MB. Al subir un archivo:
+
+1. El binario se guarda en `data/uploads/<id>.<ext>` (configurable con `SACD_UPLOAD_DIR`).
+2. Se extrae el texto en el mismo proceso, sin servicios externos ni binarios que compilar:
+   `unpdf` para PDF, `mammoth` para DOCX y `xlsx` para hojas de cálculo.
+3. El texto se persiste en `document_contents` y el documento registra páginas,
+   caracteres y el resultado de la extracción.
+
+La extracción nunca impide el registro: si falla, el documento queda guardado con
+el motivo anotado en `extraction_notes` y visible en la vista de detalle. Los
+estados posibles son `ok`, `empty` (PDF escaneado, sin texto seleccionable),
+`failed` y `none` (ficha registrada sin archivo).
+
+**Los PDF escaneados todavía no se procesan**: falta OCR. El documento se marca
+como «Sin texto legible» con el aviso correspondiente.
+
 ## Estructura
 
 ```
 src/
   app/
     api/
-      documents/route.ts              GET, POST
+      documents/route.ts              GET, POST (carga de archivo)
+      documents/[id]/route.ts         GET, DELETE
+      documents/[id]/archivo/route.ts GET (archivo original)
       evaluations/route.ts            GET, POST (ejecutar evaluación)
       evaluations/templates/route.ts  POST (crear matriz)
       catalog/route.ts                GET, POST
     layout.tsx  globals.css  page.tsx
   components/                         Vistas y modales
   lib/
-    db.ts       Conexión y esquema SQLite
+    db.ts       Conexión, esquema y migraciones SQLite
+    almacen.ts  Guardado y lectura de los archivos originales
+    extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
     sqlite.ts   Ayudas tipadas y transacciones
     seed.ts     Carga inicial idempotente
     rubric.ts   Rúbrica base y normas prioritarias
@@ -104,16 +129,18 @@ src/
 
 SQLite, archivo único. La ruta se configura con `SACD_DB_PATH` (ver
 `.env.example`). El esquema se crea al primer arranque e incluye `documents`,
-`templates`, `criteria`, `evaluations`, `findings` y `norms`.
+`document_contents`, `templates`, `criteria`, `evaluations`, `findings` y `norms`.
+Las bases creadas con versiones anteriores del esquema se actualizan solas al
+arrancar, sin perder datos.
 
-El directorio `data/` está excluido del control de versiones.
+El directorio `data/` —base y archivos cargados— está excluido del control de versiones.
 
 ## Pendientes conocidos
 
-- Motor de análisis real (extracción de texto, verificación de citas, detección
-  de duplicidad). Hoy el puntaje es determinista, no analítico.
-- El archivo cargado en «Incorporar documento» no se almacena: solo se toma su
-  nombre como título. Falta almacenamiento de binarios y extracción de texto.
+- Motor de análisis real: evaluar el texto extraído contra cada criterio,
+  verificar citas y detectar duplicidad. Hoy el puntaje es determinista, no
+  analítico. El texto del documento ya está disponible para alimentarlo.
+- OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».
 - Autenticación y autorización. La sesión de la barra lateral es fija.
 - Los módulos «Usuarios y roles» y «Configuración» son marcadores.
 - El panel de resumen usa datos de demostración, no consultas a la base.

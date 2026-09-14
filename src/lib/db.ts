@@ -34,7 +34,23 @@ function createSchema(db: DatabaseSync): void {
       quality_score INTEGER,
       severity      TEXT,
       created_at    INTEGER NOT NULL,
-      updated_at    INTEGER NOT NULL
+      updated_at    INTEGER NOT NULL,
+      file_name     TEXT,
+      mime_type     TEXT,
+      file_size     INTEGER,
+      storage_path  TEXT,
+      page_count    INTEGER,
+      char_count    INTEGER,
+      extraction_status  TEXT NOT NULL DEFAULT 'none',
+      extraction_notes   TEXT
+    );
+
+    -- El texto extraído vive aparte para que listar el repositorio no arrastre
+    -- documentos completos en cada consulta.
+    CREATE TABLE IF NOT EXISTS document_contents (
+      document_id  TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+      content      TEXT NOT NULL,
+      extracted_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS templates (
@@ -87,11 +103,37 @@ function createSchema(db: DatabaseSync): void {
   `);
 }
 
+/**
+ * Añade las columnas que no existían en versiones anteriores del esquema. Una
+ * base creada antes del cargador de archivos se actualiza sin perder datos.
+ */
+function migrateSchema(db: DatabaseSync): void {
+  const columnas = new Set(
+    (db.prepare('PRAGMA table_info(documents)').all() as { name: string }[]).map((c) => c.name),
+  );
+
+  const faltantes: [string, string][] = [
+    ['file_name', 'TEXT'],
+    ['mime_type', 'TEXT'],
+    ['file_size', 'INTEGER'],
+    ['storage_path', 'TEXT'],
+    ['page_count', 'INTEGER'],
+    ['char_count', 'INTEGER'],
+    ['extraction_status', "TEXT NOT NULL DEFAULT 'none'"],
+    ['extraction_notes', 'TEXT'],
+  ];
+
+  for (const [nombre, tipo] of faltantes) {
+    if (!columnas.has(nombre)) db.exec(`ALTER TABLE documents ADD COLUMN ${nombre} ${tipo}`);
+  }
+}
+
 export function getDb(): DatabaseSync {
   if (globalForDb.__docucalidadDb) return globalForDb.__docucalidadDb;
 
   const db = new DatabaseSync(resolveDbPath());
   createSchema(db);
+  migrateSchema(db);
   seedDatabase(db);
   globalForDb.__docucalidadDb = db;
   return db;

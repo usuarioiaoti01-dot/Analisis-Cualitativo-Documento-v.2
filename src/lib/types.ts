@@ -16,6 +16,16 @@ export const DOCUMENT_TYPES = [
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
+/** Resultado de la extracción de texto del archivo cargado. */
+export type ExtractionStatus = 'none' | 'ok' | 'empty' | 'failed';
+
+export const EXTRACTION_LABEL: Record<ExtractionStatus, string> = {
+  none: 'Sin archivo',
+  ok: 'Texto extraído',
+  empty: 'Sin texto legible',
+  failed: 'Extracción fallida',
+};
+
 export interface DocumentRecord {
   id: string;
   title: string;
@@ -26,6 +36,19 @@ export interface DocumentRecord {
   document_type: string;
   quality_score: number | null;
   severity: Severity | null;
+  file_name: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  page_count: number | null;
+  char_count: number | null;
+  extraction_status: ExtractionStatus;
+  extraction_notes: string | null;
+}
+
+/** Documento con su texto extraído, para la vista de detalle. */
+export interface DocumentDetail extends DocumentRecord {
+  content: string | null;
+  extracted_at: number | null;
 }
 
 export interface CriterionRecord {

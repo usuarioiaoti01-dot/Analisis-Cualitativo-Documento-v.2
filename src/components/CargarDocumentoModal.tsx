@@ -11,7 +11,15 @@ const ACCEPTED = '.pdf,.docx,.xlsx';
 
 interface CargarDocumentoModalProps {
   onClose: () => void;
-  onSubmit: (title: string, documentType: string) => Promise<void>;
+  /** Sube el archivo; el servidor lo guarda y extrae su texto. */
+  onSubmit: (file: File, documentType: string) => Promise<void>;
+}
+
+/** Tamaño legible para el aviso bajo el nombre del archivo. */
+function formatearTamano(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModalProps) {
@@ -39,8 +47,7 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
 
     setSaving(true);
     try {
-      // El título del documento se toma del nombre del archivo, sin la extensión.
-      await onSubmit(file.name.replace(/\.[^.]+$/, ''), documentType);
+      await onSubmit(file, documentType);
       onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'No fue posible registrar el documento.');
@@ -68,7 +75,7 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
             disabled={saving}
             className="rounded-lg border border-hairline px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
           >
-            {saving ? 'Registrando…' : 'Iniciar evaluación'}
+            {saving ? 'Procesando archivo…' : 'Iniciar evaluación'}
           </button>
         </>
       }
@@ -85,7 +92,11 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
         <p className="mt-3 text-sm font-semibold text-ink">
           {file ? file.name : 'Seleccione o arrastre un archivo'}
         </p>
-        <p className="mt-1 text-xs text-ink-muted">PDF, DOCX o XLSX · hasta {MAX_SIZE_MB} MB</p>
+        <p className="mt-1 text-xs text-ink-muted">
+          {file
+            ? `${formatearTamano(file.size)} · el texto se extraerá al cargar`
+            : `PDF, DOCX o XLSX · hasta ${MAX_SIZE_MB} MB`}
+        </p>
 
         <input
           ref={inputRef}
