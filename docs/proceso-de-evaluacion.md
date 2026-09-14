@@ -225,7 +225,7 @@ que superan el umbral: saber que un documento se comparó y quedó en 2% es tan
 matriz a la API de Anthropic, y obtiene un resultado por criterio con sus
 hallazgos. Es la única etapa que saca el texto del perímetro de la entidad.
 
-### Qué se evalúa y qué no: la carátula queda fuera
+### Qué se evalúa y qué no: las dos puntas quedan fuera
 
 Un memorando empieza con su número, el destinatario, el remitente, el asunto y
 la fecha. La segmentación las reconoce como secciones porque lo parecen, pero no
@@ -243,6 +243,14 @@ El rol se deduce al leer y no se guarda en la base, de modo que vale también
 para los documentos cargados antes de que la distinción existiera. La ficha
 marca cada sección de carátula con la etiqueta «trámite», y la respuesta de la
 evaluación informa cuántas se omitieron en `resumen.secciones_omitidas`.
+
+El **pie** se recorta con el mismo criterio: la copia a terceros (`c.c.`), la
+despedida, la firma y las siglas de visación. Se busca la fórmula de cierre más
+temprana de los últimos renglones y se corta desde ahí —tras un «Atentamente»
+vienen el nombre y el cargo, que por sí solos no se distinguen de una línea
+cualquiera—, con dos topes absolutos: el pie no puede pasar de 1 200 caracteres
+ni de 15 renglones. Un tope proporcional dejaba sin recortar los documentos
+breves, que es justo donde el pie pesa más.
 
 La verificación de evidencia sigue corriendo contra el **texto completo**, así
 que las citas conservan su ubicación real en el documento.

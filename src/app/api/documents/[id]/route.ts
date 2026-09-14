@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { queryAll, queryOne } from '@/lib/sqlite';
 import { borrarArchivo } from '@/lib/almacen';
-import { clasificarSecciones } from '@/lib/tramite';
+import { rolesDeSecciones } from '@/lib/tramite';
+import { avisosUtiles } from '@/lib/extraccion';
 import type {
   DocumentDetail,
   EvaluationRecord,
@@ -32,6 +33,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'El documento no existe.' }, { status: 404 });
   }
 
+  // Los documentos cargados antes del filtro guardaron avisos que no dicen
+  // nada; se descartan al leer para no tener que reprocesarlos.
+  if (document.extraction_notes) {
+    document.extraction_notes = avisosUtiles([document.extraction_notes])[0] ?? null;
+  }
+
   // El listado solo necesita un extracto: el cuerpo completo de cada sección
   // duplicaría el texto del documento, que ya viaja una vez en `content`.
   const filas = queryAll<SectionRecord>(
@@ -45,7 +52,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   // El rol se deduce aquí y no se guarda: así vale también para los documentos
   // cargados antes de que la distinción existiera, sin volver a segmentarlos.
-  const roles = clasificarSecciones(filas);
+  const texto = queryOne<{ content: string }>(
+    db,
+    'SELECT content FROM document_contents WHERE document_id = ?',
+    id,
+  );
+  const roles = rolesDeSecciones(texto?.content ?? '', filas);
   const sections = filas.map((fila, indice) => ({ ...fila, role: roles[indice] }));
 
   const evaluations = queryAll<EvaluationRecord>(

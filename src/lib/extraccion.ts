@@ -71,6 +71,24 @@ async function extraerDePdf(buffer: Buffer): Promise<TextoExtraido> {
   return { content, pageCount: totalPages, warnings };
 }
 
+/**
+ * Avisos de las librerías que no le dicen nada a quien evalúa el documento.
+ * «An unrecognised element was ignored: w:tblPrEx» habla de una propiedad de
+ * tabla que Word escribe y mammoth no traduce: el texto sale completo igual.
+ * Mostrarlos en la ficha, en inglés y con aire de error, hace dudar de una
+ * extracción que está bien.
+ */
+const AVISOS_SIN_VALOR = [
+  /unrecognised element was ignored/i,
+  /is not a recognised paragraph style/i,
+  /unrecognised paragraph style/i,
+];
+
+/** Deja solo los avisos que un revisor podría necesitar. */
+export function avisosUtiles(avisos: string[]): string[] {
+  return avisos.filter((aviso) => !AVISOS_SIN_VALOR.some((patron) => patron.test(aviso)));
+}
+
 async function extraerDeDocx(buffer: Buffer): Promise<TextoExtraido> {
   const mammoth = (await import('mammoth')).default;
   const { value, messages } = await mammoth.extractRawText({ buffer });
@@ -81,7 +99,7 @@ async function extraerDeDocx(buffer: Buffer): Promise<TextoExtraido> {
     content: value.trim(),
     pageCount: parrafos.length,
     // mammoth avisa de elementos que no supo convertir (imágenes, campos, etc.).
-    warnings: messages.filter((m) => m.type === 'warning').map((m) => m.message),
+    warnings: avisosUtiles(messages.filter((m) => m.type === 'warning').map((m) => m.message)),
   };
 }
 

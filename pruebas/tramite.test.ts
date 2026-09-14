@@ -1,4 +1,9 @@
-import { clasificarSecciones, textoEvaluable } from '../src/lib/tramite.ts';
+import {
+  clasificarSecciones,
+  recortarPie,
+  rolesDeSecciones,
+  textoEvaluable,
+} from '../src/lib/tramite.ts';
 import { segmentar } from '../src/lib/segmentacion.ts';
 
 /** Memorando real, con su carátula delante del cuerpo. */
@@ -23,6 +28,13 @@ const MEMORANDO = [
   'La propuesta resulta viable en los términos expuestos.',
   'RECOMENDACIONES',
   'Se recomienda su aprobación.',
+  '',
+  'Atentamente,',
+  'MARTÍN RODOLFO MONTOYA NEYRA',
+  'Director de la Oficina de Tecnologías de la Información',
+  '',
+  'c.c.: Dirección de Gestión Sostenible del Patrimonio Forestal (DGSPF)',
+  'MRMN/jlpc',
 ].join('\n');
 
 /** Una directiva no tiene carátula: su primera sección ya es cuerpo. */
@@ -35,6 +47,8 @@ const DIRECTIVA = [
   'Todas las unidades de organización.',
 ].join('\n');
 
+const SALTO = String.fromCharCode(10);
+
 let fallos = 0;
 
 function comprobar(nombre: string, condicion: boolean, detalle = '') {
@@ -45,7 +59,7 @@ function comprobar(nombre: string, condicion: boolean, detalle = '') {
 /* ── Memorando ──────────────────────────────────────────────────────────── */
 
 const seccionesMemo = segmentar(MEMORANDO);
-const rolesMemo = clasificarSecciones(seccionesMemo);
+const rolesMemo = rolesDeSecciones(MEMORANDO, seccionesMemo);
 const tramite = seccionesMemo.filter((_, i) => rolesMemo[i] === 'tramite').map((s) => s.heading);
 const cuerpo = seccionesMemo.filter((_, i) => rolesMemo[i] === 'cuerpo').map((s) => s.heading);
 
@@ -60,16 +74,44 @@ comprobar(
     tramite.includes('FECHA'),
 );
 comprobar(
-  'el cuerpo conserva sus cinco secciones',
-  cuerpo.length === 5 && cuerpo[0].startsWith('ANTECEDENTES'),
-  `${cuerpo.length} secciones`,
+  'el cuerpo son exactamente las cinco secciones de contenido',
+  cuerpo.join('|') === 'ANTECEDENTES|ANÁLISIS TÉCNICO|BASE LEGAL|CONCLUSIONES|RECOMENDACIONES',
+  cuerpo.join(' | '),
+);
+comprobar(
+  'la sección que abre el pie también se marca',
+  tramite.length === 5 && tramite[tramite.length - 1].includes('MARTÍN'),
+  tramite.join(' | '),
 );
 
 const evaluable = textoEvaluable(MEMORANDO, seccionesMemo);
 comprobar('el texto evaluable empieza en ANTECEDENTES', evaluable.texto.includes('ANTECEDENTES'));
 comprobar('el texto evaluable no incluye al remitente', !evaluable.texto.includes('JAIME DELGADO'));
 comprobar('el texto evaluable conserva la marca de página', evaluable.texto.startsWith('--- Página 1 ---'));
-comprobar('el texto evaluable llega hasta el final', evaluable.texto.includes('Se recomienda su aprobación.'));
+comprobar(
+  'el texto evaluable llega hasta la última recomendación',
+  evaluable.texto.includes('Se recomienda su aprobación.'),
+);
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+
+comprobar('el pie queda fuera desde la despedida', !evaluable.texto.includes('Atentamente'));
+comprobar('el pie no deja la copia a terceros', !evaluable.texto.includes('c.c.'));
+comprobar('el pie no deja las siglas de visación', !evaluable.texto.includes('MRMN/jlpc'));
+comprobar(
+  'se informa cuántos renglones de pie se quitaron',
+  evaluable.lineasDePie === 6,
+  `${evaluable.lineasDePie} renglones`,
+);
+
+comprobar(
+  'sin fórmula de cierre no se recorta nada',
+  recortarPie(['CONCLUSIONES', 'La propuesta resulta viable.'].join(SALTO)).lineas === 0,
+);
+comprobar(
+  'un ancla que se llevaría el documento entero se ignora',
+  recortarPie(['Atentamente, se remite lo solicitado.', 'Una línea más.'].join(SALTO)).lineas === 0,
+);
 
 /* ── Directiva ──────────────────────────────────────────────────────────── */
 

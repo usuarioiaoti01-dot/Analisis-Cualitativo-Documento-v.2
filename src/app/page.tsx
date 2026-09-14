@@ -122,6 +122,7 @@ export default function Page() {
         hallazgos: number;
         citas_descartadas: number;
         secciones_omitidas?: number;
+        lineas_de_pie?: number;
       };
     }>('/api/evaluations', {
       method: 'POST',
@@ -135,10 +136,12 @@ export default function Page() {
       `Puntaje ${evaluation.score ?? '—'}/100 sobre ${resumen.criterios} criterios.`,
       `${resumen.hallazgos} hallazgo(s) con evidencia verificada.`,
     ];
-    if (resumen.secciones_omitidas) {
-      partes.push(
-        `Se excluyó la carátula del documento: ${resumen.secciones_omitidas} sección(es) de trámite.`,
-      );
+    if (resumen.secciones_omitidas || resumen.lineas_de_pie) {
+      const fuera = [
+        resumen.secciones_omitidas && `${resumen.secciones_omitidas} sección(es) de carátula`,
+        resumen.lineas_de_pie && `${resumen.lineas_de_pie} renglón(es) de pie`,
+      ].filter(Boolean);
+      partes.push(`Fuera del análisis: ${fuera.join(' y ')}.`);
     }
     if (resumen.citas_descartadas > 0) {
       partes.push(

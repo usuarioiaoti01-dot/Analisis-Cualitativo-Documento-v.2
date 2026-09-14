@@ -100,6 +100,87 @@ export function clasificarSecciones(secciones: SeccionClasificable[]): RolSeccio
 }
 
 /**
+ * Fórmulas de cierre. Lo que empieza en cualquiera de ellas es pie: copia a
+ * terceros, despedida, firma y siglas de quienes visaron. Nada de eso es
+ * contenido que un criterio pueda evaluar.
+ */
+const ANCLAS_DE_PIE: RegExp[] = [
+  /^c\.?\s?c\.?\s*[:.]/,
+  /^(muy\s+)?atentamente\b/,
+  /^sin otro particular/,
+  /^es (todo )?cuanto (informo|tengo que informar)/,
+  /^(documento\s+)?firmado digitalmente/,
+  /^esta es una copia aut[eé]ntica/,
+  // Siglas de visación: «MRMN/jlpc», «ABC/def/ghi».
+  /^[a-z]{2,6}(\/[a-z]{2,6}){1,3}\.?$/,
+];
+
+/** Últimos renglones donde tiene sentido buscar el cierre. */
+const VENTANA_DE_PIE = 25;
+/**
+ * Tamaño máximo del cierre. El límite es absoluto y no proporcional: un pie es
+ * corto en sí mismo, tenga el documento dos páginas o cincuenta, y medirlo en
+ * proporción dejaba sin recortar precisamente los documentos breves.
+ */
+const MAXIMOS_DEL_PIE = { caracteres: 1200, lineas: 15 };
+
+/**
+ * Recorta el cierre del documento. Devuelve el texto sin él y cuántos renglones
+ * se quitaron.
+ *
+ * Se busca el ancla **más temprana** de la ventana final y se corta desde ahí,
+ * no desde el último renglón hacia atrás: tras un «Atentamente» vienen el
+ * nombre y el cargo del firmante, que por sí solos no se distinguen de una
+ * línea cualquiera.
+ */
+export function recortarPie(texto: string): { texto: string; lineas: number } {
+  const lineas = texto.split('\n');
+  const desde = Math.max(0, lineas.length - VENTANA_DE_PIE);
+
+  for (let i = desde; i < lineas.length; i += 1) {
+    const limpia = normalizar(lineas[i]);
+    if (limpia.length === 0) continue;
+    if (!ANCLAS_DE_PIE.some((ancla) => ancla.test(limpia))) continue;
+
+    const recortado = lineas.slice(0, i).join('\n').trimEnd();
+
+    const quitadas = lineas.length - i;
+
+    // Un ancla mal disparada no puede llevarse el documento por delante.
+    if (recortado.trim().length === 0) break;
+    if (texto.length - recortado.length > MAXIMOS_DEL_PIE.caracteres) break;
+    if (quitadas > MAXIMOS_DEL_PIE.lineas) break;
+
+    return { texto: recortado, lineas: quitadas };
+  }
+
+  return { texto, lineas: 0 };
+}
+
+/** Lo mínimo para situar una sección en el texto, en cualquiera de las dos formas. */
+type SeccionSituable = SeccionClasificable & { char_start?: number; charStart?: number };
+
+/**
+ * Rol de cada sección teniendo a la vista el texto completo: a la carátula se
+ * le suma lo que caiga dentro del cierre, para que la ficha marque igual las
+ * dos puntas que el motor no evalúa.
+ */
+export function rolesDeSecciones(contenido: string, secciones: SeccionSituable[]): RolSeccion[] {
+  const roles = clasificarSecciones(secciones);
+  const pie = recortarPie(contenido);
+  if (pie.lineas === 0) return roles;
+
+  const corte = pie.texto.length;
+  const conPie = roles.map((rol, indice) => {
+    const inicio = secciones[indice].char_start ?? secciones[indice].charStart;
+    return inicio !== undefined && inicio >= corte ? 'tramite' : rol;
+  });
+
+  // Si el pie se comiera lo que quedaba de cuerpo, se deja como estaba.
+  return conPie.includes('cuerpo') ? conPie : roles;
+}
+
+/**
  * Texto evaluable del documento: todo a partir de la primera sección de cuerpo.
  *
  * Se corta por el desplazamiento de esa sección y no reensamblando las
@@ -117,22 +198,27 @@ export function textoEvaluable(
     page_from?: number | null;
     pageFrom?: number | null;
   })[],
-): { texto: string; omitidas: number } {
+): { texto: string; omitidas: number; lineasDePie: number } {
+  // El pie se recorta sobre el texto completo: así los desplazamientos de las
+  // secciones, que se calcularon sobre él, siguen valiendo para cortar arriba.
+  const pie = recortarPie(contenido);
+
   const roles = clasificarSecciones(secciones);
   const primeraDeCuerpo = roles.indexOf('cuerpo');
 
-  if (primeraDeCuerpo <= 0) return { texto: contenido, omitidas: 0 };
+  const soloPie = { texto: pie.texto, omitidas: 0, lineasDePie: pie.lineas };
+  if (primeraDeCuerpo <= 0) return soloPie;
 
   const seccion = secciones[primeraDeCuerpo];
   const inicio = seccion.char_start ?? seccion.charStart;
-  if (inicio === undefined) return { texto: contenido, omitidas: 0 };
+  if (inicio === undefined) return soloPie;
 
-  const cuerpo = contenido.slice(inicio);
+  const cuerpo = pie.texto.slice(inicio);
 
   // El corte deja fuera la marca de la página en curso; sin ella el modelo
   // creería que el documento empieza en la página que marque el primer salto.
   const pagina = seccion.page_from ?? seccion.pageFrom;
   const texto = pagina ? `--- Página ${pagina} ---\n${cuerpo}` : cuerpo;
 
-  return { texto, omitidas: primeraDeCuerpo };
+  return { texto, omitidas: primeraDeCuerpo, lineasDePie: pie.lineas };
 }

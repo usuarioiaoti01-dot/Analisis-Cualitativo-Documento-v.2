@@ -129,10 +129,11 @@ async function evaluarConMotorIa(
     documento.id,
   );
 
-  // La carátula —número, destinatario, remitente, asunto, fecha— no es
-  // contenido evaluable: sin este recorte el motor observa que el nombre del
-  // remitente «no desarrolla su argumento». La evidencia se sigue verificando
-  // contra el texto completo, así que las citas conservan su ubicación real.
+  // La carátula —número, destinatario, remitente, asunto, fecha— y el pie
+  // —copia a terceros, despedida, firma— no son contenido evaluable: sin este
+  // recorte el motor observa que el nombre del remitente «no desarrolla su
+  // argumento». La evidencia se sigue verificando contra el texto completo,
+  // así que las citas conservan su ubicación real.
   const evaluable = textoEvaluable(contenido.content, secciones);
 
   let respuesta;
@@ -242,6 +243,7 @@ async function evaluarConMotorIa(
     resultados,
     citasDescartadas,
     seccionesOmitidas: evaluable.omitidas,
+    lineasDePie: evaluable.lineasDePie,
     usage: respuesta.usage,
   });
 }
@@ -331,6 +333,8 @@ interface DatosAPersistir {
   citasDescartadas: number;
   /** Secciones de carátula que quedaron fuera del análisis. */
   seccionesOmitidas?: number;
+  /** Renglones de pie —copia, despedida, firma— que quedaron fuera. */
+  lineasDePie?: number;
   usage?: { entrada: number; cacheEscrito: number; cacheLeido: number; salida: number };
 }
 
@@ -417,6 +421,7 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
         hallazgos: hallazgosGuardados,
         citas_descartadas: datos.citasDescartadas,
         secciones_omitidas: datos.seccionesOmitidas ?? 0,
+        lineas_de_pie: datos.lineasDePie ?? 0,
         ...(datos.usage ? { tokens: datos.usage } : {}),
       },
     },
