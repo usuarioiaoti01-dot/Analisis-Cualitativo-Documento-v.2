@@ -17,7 +17,7 @@ Qué está construido y qué no, etapa por etapa, está en
 [`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
 **Estado actual:** las siete etapas funcionan. Lo que falta son metadatos de la
-etapa 1 (autor, unidad responsable), OCR para PDF escaneados y autenticación.
+etapa 1 (autor, unidad responsable) y autenticación.
 
 ## Origen
 
@@ -76,6 +76,7 @@ Todas las rutas responden JSON.
 | `DELETE /api/documents/[id]` | Elimina el documento, su texto, secciones, evaluaciones, hallazgos y el archivo original. Disponible desde la ficha del documento, con confirmación. |
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `POST /api/documents/[id]/contraste` | Ejecuta las etapas 5 y 6 y emite hallazgos. Cuerpo opcional: `{ etapas: ['normativa', 'similitud'] }`. |
+| `POST /api/documents/[id]/ocr` | Transcribe un PDF escaneado y rehace su texto y secciones. |
 | `GET /api/evaluations` | Documentos evaluables y matrices con sus criterios. |
 | `POST /api/evaluations` | Ejecuta una evaluación. Cuerpo: `{ document_id, template_id, engine }`, donde `engine` es `ai` (por omisión) o `deterministic`. |
 | `POST /api/evaluations/templates` | Crea una matriz. Cuerpo: `{ name, document_type, criteria[] }`. Rechaza con 422 si las ponderaciones no suman 100. |
@@ -132,8 +133,12 @@ el motivo anotado en `extraction_notes` y visible en la vista de detalle. Los
 estados posibles son `ok`, `empty` (PDF escaneado, sin texto seleccionable),
 `failed` y `none` (ficha registrada sin archivo).
 
-**Los PDF escaneados todavía no se procesan**: falta OCR. El documento se marca
-como «Sin texto legible» con el aviso correspondiente.
+**Los PDF escaneados se transcriben con OCR.** Cuando la extracción no encuentra
+capa de texto, el documento se envía a la API de Anthropic, que lee las páginas
+como imágenes. El estado queda como «Texto transcrito (OCR)» —distinto de
+«Texto extraído»— porque una transcripción puede diferir del original y quien
+lea el informe debe saberlo. Requiere `ANTHROPIC_API_KEY`; sin ella el documento
+queda marcado para transcribirlo después desde su ficha.
 
 ## Estructura
 
@@ -162,6 +167,8 @@ src/
     almacen.ts  Guardado y lectura de los archivos originales
     extraccion.ts  Extracción de texto de PDF, DOCX y XLSX
     segmentacion.ts Corte del texto en secciones jerárquicas
+    ocr.ts      Transcripción de PDF escaneados
+    contenido.ts Persistencia del texto y su índice de secciones
     citas.ts    Reconocimiento de citas normativas (etapa 5)
     similitud.ts Shingling, Jaccard y contención (etapa 6)
     motor-ia.ts Evaluación del contenido con Claude (etapa 4)
@@ -197,7 +204,6 @@ El directorio `data/` —base y archivos cargados— está excluido del control 
   no el artículo. Requiere incorporar el texto de las normas al catálogo.
 - Metadatos de la etapa 1: autor, unidad responsable, fecha propia del documento,
   versionado y carga múltiple.
-- OCR para PDF escaneados. Hoy esos documentos se marcan «Sin texto legible».
 - Autenticación y autorización. La identidad sale de `src/lib/sesion.ts`, así que
   la trazabilidad es nominal: registra un nombre, no prueba quién lo escribió.
 - Los módulos «Usuarios y roles» y «Configuración» son marcadores.

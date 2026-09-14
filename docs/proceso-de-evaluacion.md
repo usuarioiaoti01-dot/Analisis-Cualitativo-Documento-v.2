@@ -79,6 +79,29 @@ producen hallazgos —4, 5 y 6— escriben en ella con la misma forma.
 `source` distingue de dónde nació el hallazgo: `evaluacion` (etapa 4),
 `normativa` (etapa 5) o `similitud` (etapa 6).
 
+### Transcripción de escaneos
+
+Un PDF escaneado no tiene capa de texto y quedaría fuera de todo el análisis.
+Buena parte de los expedientes llega así, firmados y digitalizados.
+
+Se transcribe enviando el PDF a la API de Anthropic, que lee las páginas como
+imágenes. Se eligió frente a Tesseract por dos razones: no añade dependencias
+nativas —el equipo no tiene cadena de compilación— y acierta mucho más en
+documentos institucionales peruanos, con sellos, membretes y firmas sobre el
+texto. El precio es que **el OCR requiere credencial y el documento sale del
+perímetro**, igual que la etapa 4.
+
+La transcripción conserva las marcas «--- Página N ---», que es lo que usan la
+segmentación, la ubicación de las citas y la verificación de evidencia.
+
+El estado queda en `ocr`, **distinto de `ok`**, y la interfaz lo muestra en
+ámbar: una transcripción puede diferir del original, y quien sustente una
+decisión en una cita debe saber de dónde salió ese texto. Los fragmentos que el
+modelo no pudo leer quedan como `[ilegible]` y se informa cuántos hay.
+
+Rehacer el texto de un documento **elimina sus hallazgos previos**: sus citas
+apuntaban a posiciones de un texto que ya no existe.
+
 ### Jerarquía de secciones
 
 Las secciones se anidan por su numeración: los romanos, los artículos y los

@@ -4,7 +4,9 @@ import { getDb } from '@/lib/db';
 import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
 import { guardarArchivo } from '@/lib/almacen';
 import { detectarFormato, extraerTexto } from '@/lib/extraccion';
-import { segmentar } from '@/lib/segmentacion';
+import { guardarTextoYSecciones, tieneTextoUtil } from '@/lib/contenido';
+import { ErrorDeOcr, transcribirPdf } from '@/lib/ocr';
+import { hayCredenciales } from '@/lib/motor-ia';
 import type { DocumentRecord, ExtractionStatus } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -79,16 +81,35 @@ async function registrarConArchivo(request: Request) {
   let content = '';
   let pageCount: number | null = null;
   let extractionStatus: ExtractionStatus = 'failed';
-  let extractionNotes: string | null = null;
+  const avisos: string[] = [];
 
   try {
     const extraido = await extraerTexto(buffer, formato);
     content = extraido.content;
     pageCount = extraido.pageCount;
-    extractionStatus = content.replace(/--- .*? ---/g, '').trim().length > 0 ? 'ok' : 'empty';
-    extractionNotes = extraido.warnings.length > 0 ? extraido.warnings.join(' ') : null;
+    extractionStatus = tieneTextoUtil(content) ? 'ok' : 'empty';
+    avisos.push(...extraido.warnings);
   } catch (error) {
-    extractionNotes = error instanceof Error ? error.message : 'Error desconocido en la extracción.';
+    avisos.push(error instanceof Error ? error.message : 'Error desconocido en la extracción.');
+  }
+
+  // Un PDF sin capa de texto es un escaneo. Se transcribe automáticamente
+  // cuando hay credencial; sin ella queda marcado para reintentarlo después.
+  if (extractionStatus === 'empty' && formato === 'pdf' && hayCredenciales()) {
+    try {
+      const transcrito = await transcribirPdf(buffer, pageCount ?? 0);
+      content = transcrito.content;
+      extractionStatus = 'ocr';
+      // Los avisos de la extracción fallida ya no describen el estado actual.
+      avisos.length = 0;
+      avisos.push(...transcrito.warnings);
+    } catch (error) {
+      avisos.push(
+        error instanceof ErrorDeOcr
+          ? `No se pudo transcribir el escaneo: ${error.message}`
+          : 'No se pudo transcribir el escaneo.',
+      );
+    }
   }
 
   const title = file.name.replace(/\.[^.]+$/, '');
@@ -115,60 +136,10 @@ async function registrarConArchivo(request: Request) {
       pageCount,
       content.length,
       extractionStatus,
-      extractionNotes,
+      avisos.length > 0 ? avisos.join(' ') : null,
     );
 
-    if (content.length > 0) {
-      db.prepare(
-        'INSERT INTO document_contents (document_id, content, extracted_at) VALUES (?, ?, ?)',
-      ).run(id, content, now);
-
-      // Etapa 3: segmentar deja al documento listo para que un hallazgo pueda
-      // citar una sección concreta en lugar de un rango de caracteres.
-      const insertSection = db.prepare(
-        `INSERT INTO document_sections
-           (document_id, ordinal, numbering, level, parent_id, heading, content,
-            page_from, page_to, char_start, char_end)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-
-      // Último identificador insertado en cada nivel: el padre de una sección
-      // es la anterior más cercana de nivel inferior.
-      const ultimoPorNivel = new Map<number, number>();
-
-      for (const seccion of segmentar(content)) {
-        let parentId: number | null = null;
-        for (let nivel = seccion.level - 1; nivel >= 1; nivel -= 1) {
-          const candidato = ultimoPorNivel.get(nivel);
-          if (candidato !== undefined) {
-            parentId = candidato;
-            break;
-          }
-        }
-
-        const sectionId = Number(
-          insertSection.run(
-            id,
-            seccion.ordinal,
-            seccion.numbering,
-            seccion.level,
-            parentId,
-            seccion.heading,
-            seccion.content,
-            seccion.pageFrom,
-            seccion.pageTo,
-            seccion.charStart,
-            seccion.charEnd,
-          ).lastInsertRowid,
-        );
-
-        ultimoPorNivel.set(seccion.level, sectionId);
-        // Una sección nueva invalida a las más profundas que la precedían.
-        for (const nivel of [...ultimoPorNivel.keys()]) {
-          if (nivel > seccion.level) ultimoPorNivel.delete(nivel);
-        }
-      }
-    }
+    guardarTextoYSecciones(db, id, content, now);
   });
 
   const document = queryOne<DocumentRecord>(

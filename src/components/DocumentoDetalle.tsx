@@ -11,6 +11,7 @@ import {
   FileCheck2,
   Printer,
   ScanSearch,
+  ScanText,
   Trash2,
 } from 'lucide-react';
 import { Modal } from './Modal';
@@ -37,6 +38,8 @@ import {
 const EXTRACTION_TONE: Record<ExtractionStatus, string> = {
   none: 'bg-slate-100 text-slate-600',
   ok: 'bg-sev-low-bg text-sev-low-ink',
+  // Ámbar, no verde: el texto vino de un escaneo y puede diferir del original.
+  ocr: 'bg-sev-medium-bg text-sev-medium-ink',
   empty: 'bg-sev-medium-bg text-sev-medium-ink',
   failed: 'bg-sev-high-bg text-sev-high-ink',
 };
@@ -92,6 +95,8 @@ export function DocumentoDetalle({
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
+  const [transcribiendo, setTranscribiendo] = useState(false);
+  const [avisoOcr, setAvisoOcr] = useState<string | null>(null);
   const [validando, setValidando] = useState(false);
   const [avisoValidacion, setAvisoValidacion] = useState<string | null>(null);
 
@@ -148,6 +153,30 @@ export function DocumentoDetalle({
       setRecarga((valor) => valor + 1);
     } finally {
       setContrastando(false);
+    }
+  }
+
+  /** Transcribe un PDF escaneado y rehace su texto y sus secciones. */
+  async function transcribirEscaneo() {
+    setTranscribiendo(true);
+    setAvisoOcr(null);
+    try {
+      const response = await fetch(`/api/documents/${documentId}/ocr`, { method: 'POST' });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setAvisoOcr(payload.error ?? 'No fue posible transcribir el documento.');
+        return;
+      }
+
+      const t = payload.transcrito;
+      setAvisoOcr(
+        `Transcrito: ${t.caracteres.toLocaleString('es-PE')} caracteres en ${t.secciones} secciones.`,
+      );
+      setRecarga((valor) => valor + 1);
+      onChanged();
+    } finally {
+      setTranscribiendo(false);
     }
   }
 
@@ -321,6 +350,20 @@ export function DocumentoDetalle({
             </a>
           )}
 
+            {(document.extraction_status === 'empty' ||
+              document.extraction_status === 'failed') && (
+              <button
+                type="button"
+                onClick={transcribirEscaneo}
+                disabled={transcribiendo}
+                title="Transcribir el escaneo con OCR"
+                className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:opacity-60"
+              >
+                <ScanText className="size-[18px]" aria-hidden />
+                {transcribiendo ? 'Transcribiendo…' : 'Transcribir escaneo'}
+              </button>
+            )}
+
             <a
               href={`/informe/${documentId}`}
               target="_blank"
@@ -342,6 +385,10 @@ export function DocumentoDetalle({
             </button>
           </div>
         </div>
+
+        {avisoOcr && (
+          <p className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{avisoOcr}</p>
+        )}
 
         {avisoContraste && (
           <p className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{avisoContraste}</p>
@@ -451,9 +498,14 @@ export function DocumentoDetalle({
   );
 }
 
+/**
+ * Índice del documento. Compacto por omisión —una línea por sección, sin el
+ * cuerpo— para que una directiva de cincuenta páginas quepa en una pantalla.
+ * El evaluador despliega solo lo que necesita leer.
+ */
 function Secciones({ sections }: { sections: SectionRecord[] }) {
-  // Numerales agrupados bajo su sección padre: un listado plano de cientos de
-  // entradas no sirve como índice.
+  const [abiertas, setAbiertas] = useState<Set<number>>(new Set());
+
   const hijosPorPadre = new Map<number, SectionRecord[]>();
   for (const seccion of sections) {
     if (seccion.parent_id === null) continue;
@@ -464,6 +516,15 @@ function Secciones({ sections }: { sections: SectionRecord[] }) {
 
   const raices = sections.filter((seccion) => seccion.parent_id === null);
 
+  function alternar(id: number) {
+    setAbiertas((actuales) => {
+      const siguiente = new Set(actuales);
+      if (siguiente.has(id)) siguiente.delete(id);
+      else siguiente.add(id);
+      return siguiente;
+    });
+  }
+
   if (raices.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-ink-muted">
@@ -472,40 +533,73 @@ function Secciones({ sections }: { sections: SectionRecord[] }) {
     );
   }
 
+  const todasAbiertas = abiertas.size === sections.length;
+
   return (
-    <ul className="divide-y divide-hairline">
-      {raices.map((seccion) => (
-        <SeccionEnArbol
-          key={seccion.id}
-          seccion={seccion}
-          hijosPorPadre={hijosPorPadre}
-        />
-      ))}
-    </ul>
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <p className="text-sm text-ink-muted">
+          {raices.length} {raices.length === 1 ? 'sección' : 'secciones'} de primer nivel
+          {sections.length > raices.length && ` · ${sections.length} en total`}
+        </p>
+        <button
+          type="button"
+          onClick={() =>
+            setAbiertas(todasAbiertas ? new Set() : new Set(sections.map((s) => s.id)))
+          }
+          className="text-sm font-medium text-brand hover:underline"
+        >
+          {todasAbiertas ? 'Contraer todo' : 'Desplegar todo'}
+        </button>
+      </div>
+
+      {/* El índice se desplaza dentro de su propio marco: así la ficha conserva
+          una altura fija aunque el documento tenga cientos de secciones. */}
+      <ul className="max-h-[32rem] divide-y divide-hairline overflow-y-auto rounded-lg border border-hairline">
+        {raices.map((seccion) => (
+          <SeccionEnArbol
+            key={seccion.id}
+            seccion={seccion}
+            hijosPorPadre={hijosPorPadre}
+            abiertas={abiertas}
+            onAlternar={alternar}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function SeccionEnArbol({
   seccion,
   hijosPorPadre,
+  abiertas,
+  onAlternar,
   profundidad = 0,
 }: {
   seccion: SectionRecord;
   hijosPorPadre: Map<number, SectionRecord[]>;
+  abiertas: Set<number>;
+  onAlternar: (id: number) => void;
   profundidad?: number;
 }) {
   const hijos = hijosPorPadre.get(seccion.id) ?? [];
-  const [abierta, setAbierta] = useState(false);
+  const abierta = abiertas.has(seccion.id);
+  // Una sección sin cuerpo ni numerales no tiene nada que desplegar.
+  const desplegable = hijos.length > 0 || Boolean(seccion.content);
 
   return (
-    <li className="py-3" style={{ paddingLeft: profundidad * 20 }}>
-      <div className="flex items-baseline gap-3">
-        {hijos.length > 0 ? (
+    <li>
+      <div
+        className="flex items-center gap-2 py-2 pr-3 text-sm"
+        style={{ paddingLeft: profundidad * 18 + 8 }}
+      >
+        {desplegable ? (
           <button
             type="button"
-            onClick={() => setAbierta((valor) => !valor)}
+            onClick={() => onAlternar(seccion.id)}
             aria-expanded={abierta}
-            className="-ml-1 shrink-0 rounded p-1 text-ink-muted transition-colors hover:text-ink"
+            className="shrink-0 rounded p-0.5 text-ink-muted transition-colors hover:text-ink"
           >
             <ChevronRight
               className={`size-4 transition-transform ${abierta ? 'rotate-90' : ''}`}
@@ -517,38 +611,54 @@ function SeccionEnArbol({
         )}
 
         {seccion.numbering && (
-          <span className="shrink-0 rounded bg-blue-50 px-2 py-0.5 font-mono text-xs text-blue-700">
+          <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700">
             {seccion.numbering}
           </span>
         )}
 
-        <h3 className="min-w-0 flex-1 font-medium text-ink">{seccion.heading}</h3>
+        <button
+          type="button"
+          onClick={() => desplegable && onAlternar(seccion.id)}
+          className="min-w-0 flex-1 truncate text-left font-medium text-ink"
+          title={seccion.heading}
+        >
+          {seccion.heading}
+        </button>
 
         {hijos.length > 0 && (
-          <span className="shrink-0 text-xs text-ink-muted">
-            {hijos.length} {hijos.length === 1 ? 'numeral' : 'numerales'}
-          </span>
+          <span className="shrink-0 text-xs text-ink-muted">{hijos.length} num.</span>
         )}
         {seccion.page_from && (
-          <span className="shrink-0 text-xs text-ink-muted">pág. {seccion.page_from}</span>
+          <span className="w-16 shrink-0 text-right text-xs text-ink-muted">
+            pág. {seccion.page_from}
+          </span>
         )}
       </div>
 
-      {seccion.content && (
-        <p className="mt-1.5 ml-8 line-clamp-2 text-sm text-ink-muted">{seccion.content}</p>
-      )}
+      {abierta && (
+        <div className="pr-3" style={{ paddingLeft: profundidad * 18 + 36 }}>
+          {seccion.content && (
+            <p className="pb-3 text-sm whitespace-pre-line text-ink-muted">
+              {seccion.content}
+              {seccion.content_length && seccion.content_length > seccion.content.length && '…'}
+            </p>
+          )}
 
-      {abierta && hijos.length > 0 && (
-        <ul className="mt-2 divide-y divide-hairline border-l border-hairline">
-          {hijos.map((hijo) => (
-            <SeccionEnArbol
-              key={hijo.id}
-              seccion={hijo}
-              hijosPorPadre={hijosPorPadre}
-              profundidad={profundidad + 1}
-            />
-          ))}
-        </ul>
+          {hijos.length > 0 && (
+            <ul className="divide-y divide-hairline border-t border-hairline">
+              {hijos.map((hijo) => (
+                <SeccionEnArbol
+                  key={hijo.id}
+                  seccion={hijo}
+                  hijosPorPadre={hijosPorPadre}
+                  abiertas={abiertas}
+                  onAlternar={onAlternar}
+                  profundidad={profundidad + 1}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </li>
   );

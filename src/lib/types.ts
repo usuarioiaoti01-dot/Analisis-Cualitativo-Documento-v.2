@@ -17,11 +17,14 @@ export const DOCUMENT_TYPES = [
 export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 /** Resultado de la extracción de texto del archivo cargado. */
-export type ExtractionStatus = 'none' | 'ok' | 'empty' | 'failed';
+export type ExtractionStatus = 'none' | 'ok' | 'ocr' | 'empty' | 'failed';
 
 export const EXTRACTION_LABEL: Record<ExtractionStatus, string> = {
   none: 'Sin archivo',
   ok: 'Texto extraído',
+  // Se distingue del anterior a propósito: un texto transcrito de un escaneo
+  // puede diferir del original, y quien lo lea debe saberlo.
+  ocr: 'Texto transcrito (OCR)',
   empty: 'Sin texto legible',
   failed: 'Extracción fallida',
 };

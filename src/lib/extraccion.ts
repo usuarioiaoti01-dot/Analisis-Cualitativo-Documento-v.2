@@ -64,7 +64,7 @@ async function extraerDePdf(buffer: Buffer): Promise<TextoExtraido> {
   const soloEspacios = paginas.every((pagina) => pagina.trim().length === 0);
   if (soloEspacios) {
     warnings.push(
-      'El PDF no contiene texto seleccionable. Probablemente es un escaneo y requiere OCR, que todavía no está implementado.',
+      'El PDF no contiene texto seleccionable: es un escaneo. Se transcribirá con OCR.',
     );
   }
 

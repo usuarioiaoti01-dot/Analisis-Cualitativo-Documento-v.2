@@ -19,6 +19,7 @@ const STATUS_TONE: Record<DocumentStatus, string> = {
 const EXTRACTION_TONE: Record<ExtractionStatus, string> = {
   none: 'text-ink-muted',
   ok: 'text-sev-low-ink',
+  ocr: 'text-sev-medium-ink',
   empty: 'text-sev-medium-ink',
   failed: 'text-sev-high-ink',
 };
