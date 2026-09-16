@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { queryAll, queryOne } from '@/lib/sqlite';
-import type { DocumentoReciente, FindingRecord } from '@/lib/types';
+import type { DocumentoReciente } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,25 +121,6 @@ export function GET() {
      ORDER BY MIN(c.position)`,
   );
 
-  /* ── Hallazgos que requieren atención ─────────────────────────────────── */
-
-  const hallazgos = queryAll<FindingRecord & { document_title: string }>(
-    db,
-    `SELECT f.id, f.document_id, f.evaluation_id, f.criterion_id, f.dimension, f.source,
-            f.result, f.risk, f.message, f.evidence_text, f.evidence_location, f.section_id,
-            f.recommendation, f.reference_kind, f.reference_id, f.reference_label,
-            f.status, f.resolved_by, f.resolved_at, f.created_at,
-            d.title AS document_title
-     FROM findings f
-     JOIN documents d ON d.id = f.document_id
-     WHERE f.status = 'pendiente'
-     ORDER BY CASE f.risk
-                WHEN 'critico' THEN 0 WHEN 'alto' THEN 1
-                WHEN 'medio' THEN 2 ELSE 3 END,
-              f.created_at DESC
-     LIMIT 5`,
-  );
-
   /* ── Catálogo normativo ───────────────────────────────────────────────── */
 
   const catalogo = queryOne<{ total: number; actualizado: number | null }>(
@@ -168,7 +149,6 @@ export function GET() {
       dimension: fila.dimension,
       promedio: Math.round(fila.promedio),
     })),
-    hallazgos,
     catalogo: { normas: catalogo?.total ?? 0, actualizado_en: catalogo?.actualizado ?? null },
   });
 }

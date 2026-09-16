@@ -290,7 +290,6 @@ export interface Resumen {
   };
   documentos_recientes: DocumentoReciente[];
   dimensiones: { dimension: string; promedio: number }[];
-  hallazgos: (FindingRecord & { document_title: string })[];
   catalogo: { normas: number; actualizado_en: number | null };
 }
 

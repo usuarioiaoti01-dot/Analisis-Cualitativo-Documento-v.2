@@ -11,13 +11,7 @@ import {
   Sparkles,
   SlidersHorizontal,
 } from 'lucide-react';
-import {
-  RISK_LABEL,
-  STATUS_LABEL,
-  type DocumentStatus,
-  type Resumen,
-  type Risk,
-} from '@/lib/types';
+import { STATUS_LABEL, type DocumentStatus, type Resumen } from '@/lib/types';
 import { SeverityBadge } from './SeverityBadge';
 
 const METRIC_TONE = {
@@ -35,13 +29,6 @@ const STATUS_TONE: Record<DocumentStatus, string> = {
   in_review: 'text-blue-600',
   observed: 'text-amber-600',
   compliant: 'text-emerald-600',
-};
-
-const RISK_TONE: Record<Risk, string> = {
-  bajo: 'bg-sev-low-bg text-sev-low-ink',
-  medio: 'bg-sev-medium-bg text-sev-medium-ink',
-  alto: 'bg-sev-high-bg text-sev-high-ink',
-  critico: 'bg-sev-high-ink text-white',
 };
 
 interface ResumenViewProps {
@@ -74,7 +61,7 @@ export function ResumenView({
     );
   }
 
-  const { metricas, dimensiones, hallazgos, catalogo } = resumen;
+  const { metricas, dimensiones, catalogo } = resumen;
 
   const tarjetas = [
     {
@@ -291,50 +278,6 @@ export function ResumenView({
         </div>
       </div>
 
-      <section className="card p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold text-ink">Hallazgos que requieren atención</h3>
-            <p className="mt-0.5 text-sm text-ink-muted">
-              Pendientes de revisión, ordenados por riesgo
-            </p>
-          </div>
-        </div>
-
-        <ul className="mt-4 divide-y divide-hairline">
-          {hallazgos.map((hallazgo) => (
-            <li key={hallazgo.id} className="flex items-center gap-5 py-4">
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${RISK_TONE[hallazgo.risk]}`}
-              >
-                {RISK_LABEL[hallazgo.risk]}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs text-ink-muted">
-                  {hallazgo.dimension} · {hallazgo.document_title}
-                </p>
-                <p className="font-medium text-ink">{hallazgo.message}</p>
-                {hallazgo.evidence_location && (
-                  <p className="mt-0.5 text-xs text-ink-muted">{hallazgo.evidence_location}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => onOpenDocument(hallazgo.document_id)}
-                className="shrink-0 rounded-lg border border-hairline px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
-              >
-                Revisar
-              </button>
-            </li>
-          ))}
-
-          {hallazgos.length === 0 && (
-            <li className="py-12 text-center text-sm text-ink-muted">
-              No hay hallazgos pendientes.
-            </li>
-          )}
-        </ul>
-      </section>
     </div>
   );
 }
