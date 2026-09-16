@@ -11,7 +11,10 @@ const ACCEPTED = '.pdf,.docx,.xlsx';
 
 interface CargarDocumentoModalProps {
   onClose: () => void;
-  /** Sube el archivo; el servidor lo guarda y extrae su texto. */
+  /**
+   * Sube el archivo; el servidor lo guarda y extrae su texto. No evalúa: eso
+   * se decide después, documento por documento, desde el repositorio.
+   */
   onSubmit: (file: File, documentType: string) => Promise<void>;
 }
 
@@ -41,7 +44,7 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
 
   async function handleSubmit() {
     if (!file) {
-      setError('Seleccione un archivo para iniciar la evaluación.');
+      setError('Seleccione un archivo para incorporarlo.');
       return;
     }
 
@@ -58,7 +61,7 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
 
   return (
     <Modal
-      title="Incorporar documento"
+      title="INCORPORAR DOCUMENTO"
       onClose={onClose}
       footer={
         <>
@@ -75,7 +78,7 @@ export function CargarDocumentoModal({ onClose, onSubmit }: CargarDocumentoModal
             disabled={saving}
             className="rounded-lg border border-hairline px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
           >
-            {saving ? 'Procesando archivo…' : 'Iniciar evaluación'}
+            {saving ? 'Procesando archivo…' : 'Incorporar documento'}
           </button>
         </>
       }

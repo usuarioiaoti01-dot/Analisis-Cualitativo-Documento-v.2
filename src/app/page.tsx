@@ -44,6 +44,8 @@ export default function Page() {
   const [matrixOpen, setMatrixOpen] = useState(false);
   /** Matriz que se está modificando; `null` significa que se está creando una. */
   const [matrizEnEdicion, setMatrizEnEdicion] = useState<TemplateRecord | null>(null);
+  /** Documento que llega preseleccionado al módulo de evaluaciones. */
+  const [documentoParaEvaluar, setDocumentoParaEvaluar] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
@@ -102,15 +104,16 @@ export default function Page() {
     form.append('file', file);
     form.append('document_type', documentType);
 
-    const { document } = await request<{ document: DocumentRecord }>('/api/documents', {
+    await request<{ document: DocumentRecord }>('/api/documents', {
       method: 'POST',
       body: form,
     });
 
     await Promise.all([loadDocuments(), loadEvaluations(), loadResumen()]);
+    // Se queda en el repositorio, no en la ficha: incorporar y evaluar son dos
+    // decisiones, y la segunda se toma desde la lista.
     setSection('documentos');
-    // Abrir el detalle deja a la vista el texto que se acaba de extraer.
-    setOpenDocumentId(document.id);
+    setOpenDocumentId(null);
   }
 
   /** Devuelve el resumen de la ejecución para mostrarlo en la vista. */
@@ -241,13 +244,22 @@ export default function Page() {
               <DocumentosView
                 documents={documents}
                 loading={documentsLoading}
+                templates={templates}
                 onRegister={() => setUploadOpen(true)}
                 onOpen={setOpenDocumentId}
+                onEvaluar={(documentId, templateId) =>
+                  runEvaluation(documentId, templateId, motor?.ia_disponible ? 'ai' : 'deterministic')
+                }
+                onElegirMatriz={(documentId) => {
+                  setDocumentoParaEvaluar(documentId);
+                  setSection('evaluaciones');
+                }}
               />
             ))}
 
           {section === 'evaluaciones' && (
             <EvaluacionesView
+              documentoInicial={documentoParaEvaluar}
               documents={evaluationDocuments}
               templates={templates}
               motor={motor}

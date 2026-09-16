@@ -2,7 +2,7 @@
 
 export const SECTIONS = [
   { id: 'resumen', label: 'Resumen', title: 'Control de calidad documental' },
-  { id: 'documentos', label: 'Documentos', title: 'Documentos' },
+  { id: 'documentos', label: 'Documentos', title: 'Carga de Documentos a Evaluar' },
   { id: 'evaluaciones', label: 'Evaluaciones', title: 'Evaluaciones' },
   { id: 'catalogo', label: 'Catálogo normativo', title: 'Catálogo normativo' },
   { id: 'usuarios', label: 'Usuarios y roles', title: 'Usuarios y roles' },

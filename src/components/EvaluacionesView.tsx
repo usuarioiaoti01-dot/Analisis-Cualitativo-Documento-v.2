@@ -16,6 +16,8 @@ export type Motor = 'ai' | 'deterministic';
 
 interface EvaluacionesViewProps {
   documents: { id: string; title: string }[];
+  /** Documento que llega ya elegido desde el repositorio, si lo hay. */
+  documentoInicial?: string | null;
   templates: TemplateRecord[];
   /** Estado del motor con IA, según lo informa el servidor. */
   motor: { ia_disponible: boolean; modelo: string } | null;
@@ -28,6 +30,7 @@ interface EvaluacionesViewProps {
 
 export function EvaluacionesView({
   documents,
+  documentoInicial,
   templates,
   motor,
   onRun,
@@ -35,7 +38,7 @@ export function EvaluacionesView({
   onEditTemplate,
   onDeleteTemplate,
 }: EvaluacionesViewProps) {
-  const [documentId, setDocumentId] = useState('');
+  const [documentId, setDocumentId] = useState(documentoInicial ?? '');
   const [templateId, setTemplateId] = useState('');
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
