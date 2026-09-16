@@ -5,9 +5,15 @@ import { leerArchivo } from '@/lib/almacen';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/documents/[id]/archivo — devuelve el archivo original tal como se cargó. */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * GET /api/documents/[id]/archivo — devuelve el archivo original tal como se
+ * cargó. Con `?descarga=1` se sirve como adjunto, para que el navegador lo
+ * guarde en lugar de mostrarlo; sin el parámetro se muestra incrustado, que es
+ * lo que necesita la vista previa.
+ */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const descarga = new URL(request.url).searchParams.get('descarga') === '1';
   const db = getDb();
 
   const row = queryOne<{ storage_path: string | null; file_name: string | null; mime_type: string | null }>(
@@ -34,7 +40,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': row.mime_type || 'application/octet-stream',
-      'Content-Disposition': `inline; filename="${encodeURIComponent(row.file_name ?? id)}"`,
+      'Content-Disposition': `${descarga ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(row.file_name ?? id)}`,
       'Content-Length': String(buffer.length),
     },
   });

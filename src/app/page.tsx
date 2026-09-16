@@ -210,11 +210,7 @@ export default function Page() {
       />
 
       <main className="min-w-0 flex-1 px-8 py-7">
-        <TopBar
-          eyebrow={current.label}
-          title={current.title}
-          onUpload={() => setUploadOpen(true)}
-        />
+        <TopBar eyebrow={current.label} title={current.title} />
 
         <div className="mt-7">
           {section === 'resumen' && (

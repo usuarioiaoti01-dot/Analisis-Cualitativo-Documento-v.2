@@ -9,8 +9,8 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   footer: React.ReactNode;
-  /** Ancho máximo del diálogo; la matriz de evaluación necesita más espacio. */
-  size?: 'md' | 'lg';
+  /** Ancho máximo del diálogo; la matriz y la vista previa necesitan más espacio. */
+  size?: 'md' | 'lg' | 'xl';
 }
 
 export function Modal({ title, description, onClose, children, footer, size = 'md' }: ModalProps) {
@@ -33,7 +33,9 @@ export function Modal({ title, description, onClose, children, footer, size = 'm
       }}
     >
       <div
-        className={`w-full rounded-xl bg-white shadow-xl ${size === 'lg' ? 'max-w-3xl' : 'max-w-lg'}`}
+        className={`w-full rounded-xl bg-white shadow-xl ${
+          size === 'xl' ? 'max-w-5xl' : size === 'lg' ? 'max-w-3xl' : 'max-w-lg'
+        }`}
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
           <div>

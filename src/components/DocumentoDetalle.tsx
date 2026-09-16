@@ -4,13 +4,12 @@ import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
-  ChevronRight,
+  Download,
   ExternalLink,
   FileText,
   Loader2,
   FileCheck2,
   Printer,
-  ScanSearch,
   ScanText,
   Trash2,
 } from 'lucide-react';
@@ -32,7 +31,6 @@ import {
   type FindingSource,
   type FindingStatus,
   type Risk,
-  type SectionRecord,
 } from '@/lib/types';
 
 const EXTRACTION_TONE: Record<ExtractionStatus, string> = {
@@ -58,11 +56,10 @@ const RISK_TONE: Record<Risk, string> = {
   critico: 'bg-sev-high-ink text-white',
 };
 
-type Pestana = 'secciones' | 'resultados' | 'hallazgos' | 'texto';
+type Pestana = 'resultados' | 'hallazgos';
 
 interface Respuesta {
   document: DocumentDetail;
-  sections: SectionRecord[];
   evaluations: EvaluationRecord[];
   results: EvaluationResultRecord[];
   findings: FindingRecord[];
@@ -86,12 +83,9 @@ export function DocumentoDetalle({
   const [data, setData] = useState<Respuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pestana, setPestana] = useState<Pestana>('secciones');
-  const [texto, setTexto] = useState<string | null>(null);
-  const [textoCargando, setTextoCargando] = useState(false);
-  const [contrastando, setContrastando] = useState(false);
-  const [avisoContraste, setAvisoContraste] = useState<string | null>(null);
+  const [pestana, setPestana] = useState<Pestana>('resultados');
   const [recarga, setRecarga] = useState(0);
+  const [vistaPrevia, setVistaPrevia] = useState(false);
   const [confirmandoBorrado, setConfirmandoBorrado] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [errorBorrado, setErrorBorrado] = useState<string | null>(null);
@@ -126,35 +120,6 @@ export function DocumentoDetalle({
       cancelled = true;
     };
   }, [documentId, recarga]);
-
-  /** Etapas 5 y 6: validación normativa y comparación con el repositorio. */
-  async function ejecutarContraste() {
-    setContrastando(true);
-    setAvisoContraste(null);
-    try {
-      const response = await fetch(`/api/documents/${documentId}/contraste`, { method: 'POST' });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setAvisoContraste(payload.error ?? 'No fue posible ejecutar el contraste.');
-        return;
-      }
-
-      const normativa = payload.resumen?.normativa;
-      const similitud = payload.resumen?.similitud;
-      setAvisoContraste(
-        `${payload.hallazgos} hallazgo(s). ` +
-          `Citas normativas: ${normativa?.citas_detectadas ?? 0} detectadas, ` +
-          `${normativa?.verificadas ?? 0} verificadas contra el catálogo. ` +
-          `Repositorio: ${similitud?.coincidencias ?? 0} coincidencia(s) en ` +
-          `${similitud?.documentos_comparados ?? 0} documento(s).`,
-      );
-      setPestana('hallazgos');
-      setRecarga((valor) => valor + 1);
-    } finally {
-      setContrastando(false);
-    }
-  }
 
   /** Transcribe un PDF escaneado y rehace su texto y sus secciones. */
   async function transcribirEscaneo() {
@@ -231,18 +196,6 @@ export function DocumentoDetalle({
     }
   }
 
-  // El texto completo pesa cientos de kilobytes: se pide solo al abrir su pestaña.
-  useEffect(() => {
-    if (pestana !== 'texto' || texto !== null || textoCargando) return;
-
-    setTextoCargando(true);
-    fetch(`/api/documents/${documentId}/texto`)
-      .then((response) => response.json())
-      .then((payload) => setTexto(payload.content ?? payload.error ?? ''))
-      .catch(() => setTexto('No fue posible cargar el texto.'))
-      .finally(() => setTextoCargando(false));
-  }, [pestana, texto, textoCargando, documentId]);
-
   if (loading) {
     return (
       <section className="card px-6 py-16 text-center text-ink-muted">
@@ -267,25 +220,20 @@ export function DocumentoDetalle({
     );
   }
 
-  const { document, sections, evaluations, results, findings } = data;
+  const { document, evaluations, results, findings } = data;
   const ultima = evaluations[0];
 
   const metadatos = [
     { label: 'Tipo documental', value: document.document_type },
     { label: 'Estado', value: STATUS_LABEL[document.status] },
-    { label: 'Versión', value: `v${document.version}` },
     { label: 'Archivo', value: document.file_name ?? '—' },
     { label: 'Tamaño', value: document.file_size ? formatearTamano(document.file_size) : '—' },
-    { label: 'Páginas / hojas', value: document.page_count?.toString() ?? '—' },
-    { label: 'Secciones', value: sections.length.toString() },
     { label: 'Caracteres extraídos', value: document.char_count?.toLocaleString('es-PE') ?? '—' },
   ];
 
   const pestanas: { id: Pestana; label: string; count: number }[] = [
-    { id: 'secciones', label: 'Secciones', count: sections.length },
     { id: 'resultados', label: 'Resultados por criterio', count: results.length },
     { id: 'hallazgos', label: 'Hallazgos', count: findings.length },
-    { id: 'texto', label: 'Texto completo', count: 0 },
   ];
 
   return (
@@ -323,31 +271,15 @@ export function DocumentoDetalle({
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
+          {document.file_name && (
             <button
               type="button"
-              onClick={ejecutarContraste}
-              disabled={contrastando || document.extraction_status !== 'ok'}
-              title={
-                document.extraction_status === 'ok'
-                  ? 'Valida las citas normativas y compara el documento con el repositorio'
-                  : 'Requiere un documento con texto extraído'
-              }
-              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ScanSearch className="size-[18px]" aria-hidden />
-              {contrastando ? 'Contrastando…' : 'Ejecutar contraste'}
-            </button>
-
-          {document.file_name && (
-            <a
-              href={`/api/documents/${document.id}/archivo`}
-              target="_blank"
-              rel="noreferrer"
+              onClick={() => setVistaPrevia(true)}
               className="flex shrink-0 items-center gap-2 rounded-lg border border-hairline px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
             >
               <ExternalLink className="size-[18px]" aria-hidden />
               Ver original
-            </a>
+            </button>
           )}
 
             {(document.extraction_status === 'empty' ||
@@ -390,10 +322,6 @@ export function DocumentoDetalle({
           <p className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{avisoOcr}</p>
         )}
 
-        {avisoContraste && (
-          <p className="mt-5 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{avisoContraste}</p>
-        )}
-
         <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-hairline pt-5 lg:grid-cols-4">
           {metadatos.map((dato) => (
             <div key={dato.label} className="min-w-0">
@@ -433,7 +361,6 @@ export function DocumentoDetalle({
         </nav>
 
         <div className="p-6">
-          {pestana === 'secciones' && <Secciones sections={sections} />}
           {pestana === 'resultados' && (
             <Resultados
               results={results}
@@ -447,19 +374,17 @@ export function DocumentoDetalle({
           {pestana === 'hallazgos' && (
             <Hallazgos findings={findings} onDecidir={decidirHallazgo} />
           )}
-          {pestana === 'texto' &&
-            (textoCargando || texto === null ? (
-              <p className="py-10 text-center text-sm text-ink-muted">
-                <Loader2 className="mx-auto size-5 animate-spin" aria-hidden />
-                <span className="mt-2 block">Cargando texto…</span>
-              </p>
-            ) : (
-              <pre className="max-h-[32rem] overflow-auto rounded-lg border border-hairline bg-canvas/50 p-5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-ink">
-                {texto}
-              </pre>
-            ))}
         </div>
       </section>
+
+      {vistaPrevia && (
+        <VistaPreviaArchivo
+          documentId={document.id}
+          fileName={document.file_name ?? 'documento'}
+          mimeType={document.mime_type}
+          onClose={() => setVistaPrevia(false)}
+        />
+      )}
 
       {confirmandoBorrado && (
         <Modal
@@ -488,8 +413,8 @@ export function DocumentoDetalle({
         >
           <p className="text-sm text-ink">
             Se eliminará <strong>{document.title}</strong> junto con su texto extraído, sus{' '}
-            {sections.length} secciones, {evaluations.length} evaluación(es), {findings.length}{' '}
-            hallazgo(s) y el archivo original guardado en el servidor.
+            {evaluations.length} evaluación(es), {findings.length} hallazgo(s) y el archivo
+            original guardado en el servidor.
           </p>
           {errorBorrado && <p className="mt-3 text-sm text-sev-high-ink">{errorBorrado}</p>}
         </Modal>
@@ -499,185 +424,71 @@ export function DocumentoDetalle({
 }
 
 /**
- * Índice del documento. Compacto por omisión —una línea por sección, sin el
- * cuerpo— para que una directiva de cincuenta páginas quepa en una pantalla.
- * El evaluador despliega solo lo que necesita leer.
+ * Vista previa del archivo original sin salir de la ficha.
+ *
+ * Solo el PDF se puede incrustar: el navegador no sabe representar un DOCX ni
+ * un XLSX, y un visor incrustado que muestre una página en blanco es peor que
+ * decir con claridad que ese formato se abre en su aplicación. En ambos casos
+ * la descarga está a un clic.
  */
-function Secciones({ sections }: { sections: SectionRecord[] }) {
-  const [abiertas, setAbiertas] = useState<Set<number>>(new Set());
-
-  const hijosPorPadre = new Map<number, SectionRecord[]>();
-  for (const seccion of sections) {
-    if (seccion.parent_id === null) continue;
-    const hermanos = hijosPorPadre.get(seccion.parent_id) ?? [];
-    hermanos.push(seccion);
-    hijosPorPadre.set(seccion.parent_id, hermanos);
-  }
-
-  const raices = sections.filter((seccion) => seccion.parent_id === null);
-
-  function alternar(id: number) {
-    setAbiertas((actuales) => {
-      const siguiente = new Set(actuales);
-      if (siguiente.has(id)) siguiente.delete(id);
-      else siguiente.add(id);
-      return siguiente;
-    });
-  }
-
-  if (raices.length === 0) {
-    return (
-      <p className="py-10 text-center text-sm text-ink-muted">
-        El documento no tiene secciones reconocidas.
-      </p>
-    );
-  }
-
-  const todasAbiertas = abiertas.size === sections.length;
-  const deTramite = sections.filter((seccion) => seccion.role === 'tramite').length;
-
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <p className="text-sm text-ink-muted">
-          {raices.length} {raices.length === 1 ? 'sección' : 'secciones'} de primer nivel
-          {sections.length > raices.length && ` · ${sections.length} en total`}
-          {deTramite > 0 && (
-            <span className="text-ink-muted"> · {deTramite} de trámite, fuera del análisis</span>
-          )}
-        </p>
-        <button
-          type="button"
-          onClick={() =>
-            setAbiertas(todasAbiertas ? new Set() : new Set(sections.map((s) => s.id)))
-          }
-          className="text-sm font-medium text-brand hover:underline"
-        >
-          {todasAbiertas ? 'Contraer todo' : 'Desplegar todo'}
-        </button>
-      </div>
-
-      {/* El índice se desplaza dentro de su propio marco: así la ficha conserva
-          una altura fija aunque el documento tenga cientos de secciones. */}
-      <ul className="max-h-[32rem] divide-y divide-hairline overflow-y-auto rounded-lg border border-hairline">
-        {raices.map((seccion) => (
-          <SeccionEnArbol
-            key={seccion.id}
-            seccion={seccion}
-            hijosPorPadre={hijosPorPadre}
-            abiertas={abiertas}
-            onAlternar={alternar}
-          />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function SeccionEnArbol({
-  seccion,
-  hijosPorPadre,
-  abiertas,
-  onAlternar,
-  profundidad = 0,
+function VistaPreviaArchivo({
+  documentId,
+  fileName,
+  mimeType,
+  onClose,
 }: {
-  seccion: SectionRecord;
-  hijosPorPadre: Map<number, SectionRecord[]>;
-  abiertas: Set<number>;
-  onAlternar: (id: number) => void;
-  profundidad?: number;
+  documentId: string;
+  fileName: string;
+  mimeType: string | null;
+  onClose: () => void;
 }) {
-  const hijos = hijosPorPadre.get(seccion.id) ?? [];
-  const abierta = abiertas.has(seccion.id);
-  // Una sección sin cuerpo ni numerales no tiene nada que desplegar.
-  const desplegable = hijos.length > 0 || Boolean(seccion.content);
+  const url = `/api/documents/${documentId}/archivo`;
+  const esPdf = mimeType === 'application/pdf' || /\.pdf$/i.test(fileName);
 
   return (
-    <li>
-      <div
-        className="flex items-center gap-2 py-2 pr-3 text-sm"
-        style={{ paddingLeft: profundidad * 18 + 8 }}
-      >
-        {desplegable ? (
+    <Modal
+      title="Documento original"
+      description={fileName}
+      size="xl"
+      onClose={onClose}
+      footer={
+        <>
           <button
             type="button"
-            onClick={() => onAlternar(seccion.id)}
-            aria-expanded={abierta}
-            className="shrink-0 rounded p-0.5 text-ink-muted transition-colors hover:text-ink"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
           >
-            <ChevronRight
-              className={`size-4 transition-transform ${abierta ? 'rotate-90' : ''}`}
-              aria-hidden
-            />
+            Cerrar
           </button>
-        ) : (
-          <span className="w-5 shrink-0" aria-hidden />
-        )}
-
-        {seccion.numbering && (
-          <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700">
-            {seccion.numbering}
-          </span>
-        )}
-
-        <button
-          type="button"
-          onClick={() => desplegable && onAlternar(seccion.id)}
-          className={`min-w-0 flex-1 truncate text-left font-medium ${
-            seccion.role === 'tramite' ? 'text-ink-muted' : 'text-ink'
-          }`}
-          title={seccion.heading}
-        >
-          {seccion.heading}
-        </button>
-
-        {/* La carátula del documento se muestra, pero el motor no la evalúa:
-            conviene que el revisor sepa qué se dejó fuera y por qué. */}
-        {seccion.role === 'tramite' && (
-          <span
-            className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-ink-muted"
-            title="Carátula del documento: no se incluye en el análisis."
+          <a
+            href={`${url}?descarga=1`}
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
           >
-            trámite
-          </span>
-        )}
-
-        {hijos.length > 0 && (
-          <span className="shrink-0 text-xs text-ink-muted">{hijos.length} num.</span>
-        )}
-        {seccion.page_from && (
-          <span className="w-16 shrink-0 text-right text-xs text-ink-muted">
-            pág. {seccion.page_from}
-          </span>
-        )}
-      </div>
-
-      {abierta && (
-        <div className="pr-3" style={{ paddingLeft: profundidad * 18 + 36 }}>
-          {seccion.content && (
-            <p className="pb-3 text-sm whitespace-pre-line text-ink-muted">
-              {seccion.content}
-              {seccion.content_length && seccion.content_length > seccion.content.length && '…'}
-            </p>
-          )}
-
-          {hijos.length > 0 && (
-            <ul className="divide-y divide-hairline border-t border-hairline">
-              {hijos.map((hijo) => (
-                <SeccionEnArbol
-                  key={hijo.id}
-                  seccion={hijo}
-                  hijosPorPadre={hijosPorPadre}
-                  abiertas={abiertas}
-                  onAlternar={onAlternar}
-                  profundidad={profundidad + 1}
-                />
-              ))}
-            </ul>
-          )}
+            <Download className="size-[18px]" aria-hidden />
+            Descargar
+          </a>
+        </>
+      }
+    >
+      {esPdf ? (
+        <iframe
+          src={url}
+          title={`Vista previa de ${fileName}`}
+          className="h-[70vh] w-full rounded-lg border border-hairline bg-canvas/50"
+        />
+      ) : (
+        <div className="rounded-lg border border-dashed border-hairline bg-canvas/50 px-6 py-12 text-center">
+          <FileText className="mx-auto size-7 text-ink-muted" aria-hidden />
+          <p className="mt-3 text-sm font-medium text-ink">
+            Este formato no se previsualiza en el navegador.
+          </p>
+          <p className="mt-1 text-sm text-ink-muted">
+            Descargue el archivo para abrirlo en su aplicación. El texto extraído sí está en la
+            ficha.
+          </p>
         </div>
       )}
-    </li>
+    </Modal>
   );
 }
 
@@ -824,8 +635,8 @@ function Hallazgos({
   if (findings.length === 0) {
     return (
       <p className="py-10 text-center text-sm text-ink-muted">
-        Sin hallazgos registrados. Use «Ejecutar contraste» para validar las citas normativas y
-        comparar el documento con el repositorio.
+        Sin hallazgos registrados. Los hallazgos aparecen al evaluar el documento desde el
+        repositorio.
       </p>
     );
   }
