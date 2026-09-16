@@ -381,7 +381,6 @@ export function DocumentoDetalle({
         <VistaPreviaArchivo
           documentId={document.id}
           fileName={document.file_name ?? 'documento'}
-          mimeType={document.mime_type}
           onClose={() => setVistaPrevia(false)}
         />
       )}
@@ -424,26 +423,59 @@ export function DocumentoDetalle({
 }
 
 /**
- * Vista previa del archivo original sin salir de la ficha.
+ * Vista previa del documento original sin salir de la ficha.
  *
- * Solo el PDF se puede incrustar: el navegador no sabe representar un DOCX ni
- * un XLSX, y un visor incrustado que muestre una página en blanco es peor que
- * decir con claridad que ese formato se abre en su aplicación. En ambos casos
- * la descarga está a un clic.
+ * Se muestra el PDF, no el texto extraído: el revisor necesita ver el
+ * documento como es —membrete, tablas, firmas—. Lo que no nace en PDF lo
+ * convierte el servidor una vez y lo guarda, de modo que la primera apertura
+ * tarda unos segundos y las siguientes son inmediatas.
  */
 function VistaPreviaArchivo({
   documentId,
   fileName,
-  mimeType,
   onClose,
 }: {
   documentId: string;
   fileName: string;
-  mimeType: string | null;
   onClose: () => void;
 }) {
-  const url = `/api/documents/${documentId}/archivo`;
-  const esPdf = mimeType === 'application/pdf' || /\.pdf$/i.test(fileName);
+  const url = `/api/documents/${documentId}/pdf`;
+  const [listo, setListo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // La conversión se dispara y se espera aquí, no en el «iframe»: así el
+  // usuario ve que algo ocurre, y un fallo puede explicarse con su mensaje en
+  // lugar de dejar el visor en blanco. El visor pide el PDF por su dirección
+  // —no como objeto en memoria— para que el nombre del documento aparezca en
+  // la barra del visor; esa segunda petición ya encuentra la conversión hecha.
+  useEffect(() => {
+    let cancelado = false;
+
+    async function preparar() {
+      try {
+        const respuesta = await fetch(url, { method: 'HEAD' });
+        if (cancelado) return;
+
+        if (respuesta.ok) {
+          setListo(true);
+          return;
+        }
+
+        // El cuerpo del error no viaja en una petición HEAD: se pide entero.
+        const detalle = await fetch(url).then((r) => r.json().catch(() => ({})));
+        if (!cancelado) {
+          setError(detalle.error ?? 'No fue posible preparar la vista previa.');
+        }
+      } catch {
+        if (!cancelado) setError('No fue posible contactar con el servidor.');
+      }
+    }
+
+    void preparar();
+    return () => {
+      cancelado = true;
+    };
+  }, [url]);
 
   return (
     <Modal
@@ -461,7 +493,7 @@ function VistaPreviaArchivo({
             Cerrar
           </button>
           <a
-            href={`${url}?descarga=1`}
+            href={`/api/documents/${documentId}/archivo?descarga=1`}
             className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
           >
             <Download className="size-[18px]" aria-hidden />
@@ -470,23 +502,28 @@ function VistaPreviaArchivo({
         </>
       }
     >
-      {esPdf ? (
+      {error ? (
+        <div className="rounded-lg border border-dashed border-hairline bg-canvas/50 px-6 py-12 text-center">
+          <FileText className="mx-auto size-7 text-ink-muted" aria-hidden />
+          <p className="mt-3 text-sm font-medium text-sev-high-ink">{error}</p>
+          <p className="mt-1 text-sm text-ink-muted">
+            Puede descargar el archivo original y abrirlo en su aplicación.
+          </p>
+        </div>
+      ) : !listo ? (
+        <div className="flex h-[70vh] flex-col items-center justify-center rounded-lg border border-hairline bg-canvas/50">
+          <Loader2 className="size-6 animate-spin text-brand" aria-hidden />
+          <p className="mt-3 text-sm font-medium text-ink">Preparando la vista previa…</p>
+          <p className="mt-1 text-sm text-ink-muted">
+            La primera vez el documento se convierte a PDF; puede tardar unos segundos.
+          </p>
+        </div>
+      ) : (
         <iframe
           src={url}
           title={`Vista previa de ${fileName}`}
           className="h-[70vh] w-full rounded-lg border border-hairline bg-canvas/50"
         />
-      ) : (
-        <div className="rounded-lg border border-dashed border-hairline bg-canvas/50 px-6 py-12 text-center">
-          <FileText className="mx-auto size-7 text-ink-muted" aria-hidden />
-          <p className="mt-3 text-sm font-medium text-ink">
-            Este formato no se previsualiza en el navegador.
-          </p>
-          <p className="mt-1 text-sm text-ink-muted">
-            Descargue el archivo para abrirlo en su aplicación. El texto extraído sí está en la
-            ficha.
-          </p>
-        </div>
       )}
     </Modal>
   );

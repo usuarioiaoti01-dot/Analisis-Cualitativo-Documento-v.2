@@ -137,6 +137,21 @@ el motivo anotado en `extraction_notes` y visible en la vista de detalle. Los
 estados posibles son `ok`, `empty` (PDF escaneado, sin texto seleccionable),
 `failed` y `none` (ficha registrada sin archivo).
 
+### Vista previa del original
+
+«Ver original» muestra el documento en un visor de PDF dentro de la ficha. Lo que
+no nace en PDF se convierte en el servidor con el primer convertidor disponible:
+
+1. **LibreOffice** (`soffice`), si está instalado o si `SACD_SOFFICE` apunta a él.
+   Es la opción que funciona también en un servidor Linux.
+2. **Word o Excel por automatización** (`scripts/convertir-a-pdf.ps1`), que es lo
+   que hay en los equipos con Windows y Office.
+
+La conversión se guarda junto al original como `<id>.vista.pdf` y se reutiliza
+mientras el archivo no cambie: la primera apertura tarda unos segundos y las
+siguientes son inmediatas. Se borra con el documento. Sin ningún convertidor, la
+ventana lo dice y ofrece la descarga del original en lugar de un visor en blanco.
+
 **Los PDF escaneados se transcriben con OCR.** Cuando la extracción no encuentra
 capa de texto, el documento se envía a la API de Anthropic, que lee las páginas
 como imágenes. El estado queda como «Texto transcrito (OCR)» —distinto de

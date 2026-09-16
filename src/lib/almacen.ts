@@ -49,4 +49,11 @@ export async function borrarArchivo(storagePath: string): Promise<void> {
     : path.join(process.cwd(), storagePath);
 
   await fs.rm(absoluto, { force: true });
+
+  // La conversión a PDF de la vista previa vive junto al original: borrar uno
+  // sin el otro dejaría copias del documento en un expediente ya eliminado.
+  const extension = path.extname(absoluto);
+  if (extension.toLowerCase() !== '.pdf') {
+    await fs.rm(`${absoluto.slice(0, -extension.length)}.vista.pdf`, { force: true });
+  }
 }
