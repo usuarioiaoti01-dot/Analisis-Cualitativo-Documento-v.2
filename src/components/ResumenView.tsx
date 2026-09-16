@@ -9,7 +9,6 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { STATUS_LABEL, type DocumentStatus, type Resumen } from '@/lib/types';
 import { SeverityBadge } from './SeverityBadge';
@@ -35,7 +34,6 @@ interface ResumenViewProps {
   resumen: Resumen | null;
   loading: boolean;
   onOpenCatalog: () => void;
-  onOpenEvaluations: () => void;
   onOpenDocument: (documentId: string) => void;
 }
 
@@ -43,7 +41,6 @@ export function ResumenView({
   resumen,
   loading,
   onOpenCatalog,
-  onOpenEvaluations,
   onOpenDocument,
 }: ResumenViewProps) {
   const [query, setQuery] = useState('');
@@ -105,23 +102,13 @@ export function ResumenView({
 
   return (
     <div className="space-y-6">
-      <section className="flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-ink">
-            Decisiones sustentadas, documentos confiables.
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            Evalúe calidad, estructura, base legal y consistencia con el repositorio institucional.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenEvaluations}
-          className="flex shrink-0 items-center gap-2 rounded-lg border border-hairline bg-white px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand"
-        >
-          <SlidersHorizontal className="size-[18px]" aria-hidden />
-          Administrar criterios
-        </button>
+      <section>
+        <h2 className="text-2xl font-semibold tracking-tight text-ink">
+          Decisiones sustentadas, documentos confiables.
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Evalúe calidad, estructura, base legal y consistencia con el repositorio institucional.
+        </p>
       </section>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

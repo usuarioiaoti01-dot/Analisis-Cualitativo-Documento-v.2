@@ -219,7 +219,6 @@ export default function Page() {
               resumen={resumen}
               loading={resumenCargando}
               onOpenCatalog={() => setSection('catalogo')}
-              onOpenEvaluations={() => setSection('evaluaciones')}
               onOpenDocument={(documentId) => {
                 setOpenDocumentId(documentId);
                 setSection('documentos');
