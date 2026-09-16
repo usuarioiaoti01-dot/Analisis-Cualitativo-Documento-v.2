@@ -56,9 +56,9 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 
 | Sección | Estado |
 |---|---|
-| **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
-| **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
-| **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Se pueden modificar y eliminar. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
+| **Resumen** | Panel de indicadores, calidad por dimensión y estado del catálogo, calculados sobre la base. Con el repositorio vacío muestra ceros. |
+| **Documentos** | Carga de documentos a evaluar. Archivos reales (PDF, DOCX, XLSX) con extracción de texto, y por cada fila un botón que lanza la evaluación. La ficha muestra resultados por criterio, hallazgos y el original en un visor de PDF. |
+| **Evaluaciones** | Ejecución de una evaluación: documento, matriz y motor. Al terminar corre solo el contraste normativo y de repositorio. |
 | **Catálogo normativo** | Línea base de conocimiento. Normas separadas por tipo en pestañas (LEYES, DIRECTIVAS, LINEAMIENTOS…), incorporadas desde archivos o traídas del Inventario Normativo del SERFOR. Sustenta la validación de citas y alimenta el análisis. |
 | **Matriz de Evaluación** | Sección propia. Composición de cada matriz —criterios, preguntas y pesos por dimensión—, creación, modificación y eliminación. |
 | **Usuarios y roles** | Marcador; sin implementación. |
