@@ -511,7 +511,7 @@ function VistaPreviaArchivo({
           </p>
         </div>
       ) : !listo ? (
-        <div className="flex h-[70vh] flex-col items-center justify-center rounded-lg border border-hairline bg-canvas/50">
+        <div className="flex h-[65vh] flex-col items-center justify-center rounded-lg border border-hairline bg-canvas/50">
           <Loader2 className="size-6 animate-spin text-brand" aria-hidden />
           <p className="mt-3 text-sm font-medium text-ink">Preparando la vista previa…</p>
           <p className="mt-1 text-sm text-ink-muted">
@@ -522,7 +522,7 @@ function VistaPreviaArchivo({
         <iframe
           src={url}
           title={`Vista previa de ${fileName}`}
-          className="h-[70vh] w-full rounded-lg border border-hairline bg-canvas/50"
+          className="h-[65vh] w-full rounded-lg border border-hairline bg-canvas/50"
         />
       )}
     </Modal>

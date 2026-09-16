@@ -37,6 +37,17 @@ const TIPOS: { etiqueta: string; patron: string }[] = [
     etiqueta: 'Resolución de Secretaría General',
     patron: 'Resoluci[óo]n\\s+de\\s+Secretar[íi]a\\s+General|R\\.?\\s?S\\.?\\s?G\\.?',
   },
+  // Las resoluciones internas del SERFOR y del MIDAGRI se citan casi siempre
+  // por sus siglas. Van antes que «R.D.» y «R.M.» porque, si no, «RDE» se
+  // reconocería como una resolución directoral con un número que empieza en E.
+  {
+    etiqueta: 'Resolución de Dirección Ejecutiva',
+    patron: 'Resoluci[óo]n\\s+de\\s+Direcci[óo]n\\s+Ejecutiva|R\\.?\\s?D\\.?\\s?E\\.?',
+  },
+  {
+    etiqueta: 'Resolución de Gerencia General',
+    patron: 'Resoluci[óo]n\\s+de\\s+Gerencia\\s+General|R\\.?\\s?G\\.?\\s?G\\.?',
+  },
   { etiqueta: 'Resolución Ministerial', patron: 'Resoluci[óo]n\\s+Ministerial|R\\.?\\s?M\\.?' },
   { etiqueta: 'Resolución Directoral', patron: 'Resoluci[óo]n\\s+Directoral|R\\.?\\s?D\\.?' },
   { etiqueta: 'Resolución Jefatural', patron: 'Resoluci[óo]n\\s+Jefatural|R\\.?\\s?J\\.?' },
@@ -44,9 +55,10 @@ const TIPOS: { etiqueta: string; patron: string }[] = [
   { etiqueta: 'Decreto Supremo', patron: 'Decreto\\s+Supremo|D\\.?\\s?S\\.?' },
   { etiqueta: 'Decreto Legislativo', patron: 'Decreto\\s+Legislativo|D\\.?\\s?L\\.?' },
   { etiqueta: 'Decreto de Urgencia', patron: 'Decreto\\s+de\\s+Urgencia|D\\.?\\s?U\\.?' },
-  // «DI» es como abrevian «Directiva» el MIDAGRI y otras entidades; se exige
-  // que la siga la marca de número para que no capture cualquier «di» suelto.
-  { etiqueta: 'Directiva', patron: 'Directiva|D\\.?\\s?I\\.?(?=\\s*N)' },
+  // «DI» es como abrevian «Directiva» el MIDAGRI y otras entidades. Se exige
+  // que la siga la marca de número o un correlativo con año, para que no
+  // capture cualquier «di» suelto del texto corrido.
+  { etiqueta: 'Directiva', patron: 'Directiva|D\\.?\\s?I\\.?(?=\\s*(?:N|\\d{3,6}-\\d{4}))' },
   { etiqueta: 'Ley', patron: 'Ley' },
 ];
 

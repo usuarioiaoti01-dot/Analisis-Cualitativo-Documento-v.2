@@ -190,7 +190,7 @@ function ComposicionMatriz({
         </p>
       )}
 
-      <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+      <div className="space-y-5">
         {[...porDimension.entries()].map(([dimension, criterios]) => {
           const peso = criterios.reduce((acc, criterio) => acc + criterio.weight, 0);
 

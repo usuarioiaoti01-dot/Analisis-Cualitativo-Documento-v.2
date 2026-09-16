@@ -62,9 +62,12 @@ export async function detectarMetadatos(
     if (conIa) return conIa;
   }
 
-  // Sin modelo, el nombre del archivo es la mejor pista del código propio: el
-  // cuerpo del documento empieza citando otras normas.
-  const code = primerCodigo(fileName.replace(/[_-]+/g, ' ')) ?? primerCodigo(encabezado);
+  // Sin modelo, la única pista fiable del código propio es el nombre del
+  // archivo. El cuerpo NO sirve: un documento empieza citando las normas que
+  // lo sustentan, y tomar la primera metió «Ley N.º 31814» como código de un
+  // decreto supremo. Antes que un código equivocado, ninguno: quien incorpora
+  // la norma ve el aviso y corrige el nombre o la ficha.
+  const code = primerCodigo(fileName.replace(/[_-]+/g, ' '));
   if (!code) return null;
 
   return {

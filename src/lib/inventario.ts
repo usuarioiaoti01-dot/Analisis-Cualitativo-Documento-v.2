@@ -61,18 +61,31 @@ export interface DocumentoDelInventario {
   archivo: string;
   /** Nombre original del archivo, cuando el inventario lo conserva. */
   original: string | null;
+  /** Norma a la que pertenece, cuando consta de varios documentos. */
+  carpeta: string | null;
+  /** Papel del archivo dentro de esa norma: Resolución, Anexo, Expediente… */
+  parte: string | null;
 }
 
+/**
+ * Las tablas del inventario no son idénticas: `normativos_opr` tiene columnas
+ * —`coleccion`, `carpeta`, `parte`— que `documentos` puede no tener, según qué
+ * migraciones se hayan ejecutado allí. Por eso se piden todas las columnas y
+ * se leen las que haya: nombrarlas una a una hacía que la consulta fallara
+ * entera con «column does not exist».
+ */
 interface FilaDelInventario {
   id: number;
-  tipo: string;
-  titulo: string;
-  entidad: string | null;
-  anio: number | null;
-  estado: string | null;
-  coleccion: string | null;
-  archivo: string;
-  original: string | null;
+  tipo?: string;
+  titulo?: string;
+  entidad?: string | null;
+  anio?: number | null;
+  estado?: string | null;
+  coleccion?: string | null;
+  archivo?: string;
+  original?: string | null;
+  carpeta?: string | null;
+  parte?: string | null;
 }
 
 function configuracion() {
@@ -139,10 +152,7 @@ export async function listarInventario(): Promise<DocumentoDelInventario[]> {
   const documentos: DocumentoDelInventario[] = [];
 
   for (const tabla of TABLAS) {
-    const consulta =
-      `${url}/rest/v1/${tabla}` +
-      '?select=id,tipo,titulo,entidad,anio,estado,coleccion,archivo,original' +
-      '&order=titulo.asc';
+    const consulta = `${url}/rest/v1/${tabla}?select=*&order=titulo.asc`;
 
     const respuesta = await fetch(consulta, {
       headers: { apikey: clavePublica, Authorization: `Bearer ${acceso}` },
@@ -162,17 +172,22 @@ export async function listarInventario(): Promise<DocumentoDelInventario[]> {
 
     const filas = (await respuesta.json()) as FilaDelInventario[];
     for (const fila of filas) {
+      // Sin archivo no hay nada que traer: la ficha se omite.
+      if (!fila.archivo) continue;
+
       documentos.push({
         referencia: `${tabla}:${fila.id}`,
         tabla,
-        tipo: fila.tipo,
-        titulo: fila.titulo,
-        entidad: fila.entidad,
-        anio: fila.anio,
-        estado: fila.estado,
-        coleccion: fila.coleccion,
+        tipo: fila.tipo ?? 'Sin tipo',
+        titulo: fila.titulo ?? fila.archivo,
+        entidad: fila.entidad ?? null,
+        anio: fila.anio ?? null,
+        estado: fila.estado ?? null,
+        coleccion: fila.coleccion ?? null,
         archivo: fila.archivo,
-        original: fila.original,
+        original: fila.original ?? null,
+        carpeta: fila.carpeta ?? null,
+        parte: fila.parte ?? null,
       });
     }
   }

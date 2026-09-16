@@ -72,6 +72,26 @@ export interface ArchivoParaCatalogo {
   tipo?: string;
   /** Procedencia, para dejarla anotada en el resultado. */
   origen?: string;
+  /**
+   * Ficha que ya trae la fuente. Cuando existe se usa tal cual y no se
+   * consulta al modelo: el Inventario Normativo tiene el código y el título
+   * curados por quien cargó la norma, y una deducción nuestra solo podría
+   * empeorarlos —además de gastar una llamada por archivo—.
+   */
+  ficha?: {
+    code: string;
+    title: string;
+    issuer?: string | null;
+    subject?: string | null;
+    /** Papel de este archivo dentro de la norma, si choca con otro ya presente. */
+    complemento?: string | null;
+    /**
+     * Procedencia estable del archivo, p. ej. «inventario://normativos_opr:86».
+     * Es lo que permite reconocer que una pieza ya se trajo: el código no
+     * sirve, porque las partes de una norma comparten el de su carpeta.
+     */
+    sourceUrl?: string;
+  };
 }
 
 export async function incorporarAlCatalogo(
@@ -112,7 +132,16 @@ export async function incorporarAlCatalogo(
     };
   }
 
-  const metadatos = await detectarMetadatos(texto, archivo.nombre);
+  const metadatos = archivo.ficha
+    ? {
+        code: archivo.ficha.code,
+        title: archivo.ficha.title,
+        issuer: archivo.ficha.issuer?.trim() || 'Por determinar',
+        subject: archivo.ficha.subject?.trim() || 'Por determinar',
+        requiereRevision: false,
+      }
+    : await detectarMetadatos(texto, archivo.nombre);
+
   if (!metadatos) {
     return {
       ...base,
@@ -121,6 +150,24 @@ export async function incorporarAlCatalogo(
         'No se reconoció ningún código de norma en el documento ni en el nombre del archivo. ' +
         'Renombre el archivo incluyendo el código, por ejemplo «Ley N° 29763 …».',
     };
+  }
+
+  // Una pieza que ya se trajo de la misma fuente no vuelve a entrar. Se
+  // comprueba antes que el código porque las partes de una norma lo comparten,
+  // y sin esto cada traída repetida añadía «(2)», «(3)»…
+  if (archivo.ficha?.sourceUrl) {
+    const yaTraida = queryOne<{ code: string }>(
+      db,
+      'SELECT code FROM norms WHERE source_url = ?',
+      archivo.ficha.sourceUrl,
+    );
+    if (yaTraida) {
+      return {
+        ...base,
+        estado: 'duplicada',
+        detalle: `Ya se había traído; está en el catálogo como «${yaTraida.code}».`,
+      };
+    }
   }
 
   // Se compara por la clave normalizada del extractor, no por el texto: así
@@ -148,7 +195,8 @@ export async function incorporarAlCatalogo(
     // que el modelo identifica como la norma misma. El nombre del archivo dice
     // lo que el contenido no: si declara ser un complemento, se incorpora como
     // tal en lugar de rechazarse.
-    const complemento = complementoSegunNombre(archivo.nombre);
+    // La fuente sabe mejor que el nombre del archivo qué es cada pieza.
+    const complemento = archivo.ficha?.complemento ?? complementoSegunNombre(archivo.nombre);
     if (!complemento) {
       return {
         ...base,
@@ -167,8 +215,9 @@ export async function incorporarAlCatalogo(
   const id = Number(
     db
       .prepare(
-        `INSERT INTO norms (code, title, issuer, subject, status, created_at, file_name, storage_path)
-         VALUES (?, ?, ?, ?, 'Vigente', ?, ?, ?)`,
+        `INSERT INTO norms (code, title, issuer, subject, status, created_at, file_name,
+                            storage_path, source_url)
+         VALUES (?, ?, ?, ?, 'Vigente', ?, ?, ?, ?)`,
       )
       .run(
         metadatos.code,
@@ -178,6 +227,7 @@ export async function incorporarAlCatalogo(
         Date.now(),
         archivo.nombre,
         storagePath,
+        archivo.ficha?.sourceUrl ?? null,
       ).lastInsertRowid,
   );
 

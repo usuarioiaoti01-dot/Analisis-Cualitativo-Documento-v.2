@@ -153,6 +153,14 @@ lo que ya está aquí y trae lo que se elija. Cada archivo traído pasa por la
 misma incorporación que una carga manual, así que se identifica igual y no
 duplica fichas.
 
+**Qué se aprovecha de allí.** La ficha del inventario —código de la carpeta,
+título, entidad, tipo— se usa tal cual: no se vuelve a deducir con el modelo,
+que además costaría una llamada por archivo. Una norma con varias piezas
+—resolución, documento, anexos— entra completa: la resolución se queda con el
+código y las demás como complementos suyos. Cada ficha guarda su procedencia en
+`source_url` (`inventario://normativos_opr:86`), que es lo que permite repetir
+la traída sin duplicar nada.
+
 **Autenticación.** Las políticas del inventario exigen sesión iniciada, de modo
 que su clave pública no basta. Se inicia sesión con una cuenta del propio
 inventario —conviene que sea de solo lectura— definida en `.env.local`:

@@ -27,17 +27,21 @@ export function Modal({ title, description, onClose, children, footer, size = 'm
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/40 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      {/* El diálogo nunca pasa del alto de la ventana: encabezado y pie quedan
+          fijos y lo que crece —una matriz de diez criterios, un visor de PDF—
+          se desplaza por dentro. Antes el contenido largo se salía por arriba
+          y por abajo, y el botón de guardar quedaba fuera de la pantalla. */}
       <div
-        className={`w-full rounded-xl bg-white shadow-xl ${
+        className={`flex max-h-[calc(100vh-3rem)] w-full flex-col rounded-xl bg-white shadow-xl ${
           size === 'xl' ? 'max-w-5xl' : size === 'lg' ? 'max-w-3xl' : 'max-w-lg'
         }`}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-6">
+        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
           <div>
             <h2 className="text-lg font-semibold text-ink">{title}</h2>
             {description && <p className="mt-0.5 text-sm text-ink-muted">{description}</p>}
@@ -52,9 +56,9 @@ export function Modal({ title, description, onClose, children, footer, size = 'm
           </button>
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
-        <div className="flex justify-end gap-3 px-6 pb-6">{footer}</div>
+        <div className="flex shrink-0 justify-end gap-3 px-6 pb-6">{footer}</div>
       </div>
     </div>
   );

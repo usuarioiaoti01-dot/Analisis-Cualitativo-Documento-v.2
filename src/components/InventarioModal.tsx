@@ -12,6 +12,8 @@ interface FichaDelInventario {
   anio: number | null;
   estado: string | null;
   coleccion: string | null;
+  carpeta: string | null;
+  parte: string | null;
   ya_en_catalogo: boolean;
 }
 
@@ -72,7 +74,7 @@ export function InventarioModal({ onClose, onTraer }: InventarioModalProps) {
     if (!needle) return fichas;
 
     return fichas.filter((ficha) =>
-      [ficha.titulo, ficha.tipo, ficha.entidad ?? '', ficha.coleccion ?? '']
+      [ficha.titulo, ficha.tipo, ficha.entidad ?? '', ficha.coleccion ?? '', ficha.carpeta ?? '']
         .join(' ')
         .toLowerCase()
         .includes(needle),
@@ -193,10 +195,15 @@ export function InventarioModal({ onClose, onTraer }: InventarioModalProps) {
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium text-ink">{ficha.titulo}</span>
                     <span className="mt-0.5 block text-xs text-ink-muted">
-                      {[ficha.tipo, ficha.entidad, ficha.anio, ficha.coleccion]
+                      {[ficha.tipo, ficha.parte, ficha.entidad, ficha.anio, ficha.coleccion]
                         .filter(Boolean)
                         .join(' · ')}
                     </span>
+                    {ficha.carpeta && (
+                      <span className="mt-0.5 block font-mono text-xs text-ink-muted">
+                        {ficha.carpeta}
+                      </span>
+                    )}
                   </span>
                   {ficha.ya_en_catalogo && (
                     <span className="shrink-0 rounded-full bg-sev-low-bg px-2.5 py-1 text-xs font-medium text-sev-low-ink">
