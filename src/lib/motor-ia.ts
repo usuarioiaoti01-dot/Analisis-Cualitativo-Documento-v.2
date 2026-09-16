@@ -162,7 +162,11 @@ Reglas que no puedes quebrantar:
    norma de rango superior, o compromiso sin sustento presupuestal.
 5. Escribe en español institucional peruano, sin adjetivos innecesarios.
 6. La decisión final es de un revisor humano. Tu resultado es un insumo, no un
-   dictamen: señala lo que observas y por qué, no lo que debería aprobarse.`;
+   dictamen: señala lo que observas y por qué, no lo que debería aprobarse.
+7. Junto al documento recibes el catálogo normativo de la entidad. Es la única
+   referencia normativa admitida: no declares un incumplimiento apoyándote en
+   normas que no figuren allí ni en tu conocimiento general de la legislación,
+   porque el revisor no podría verificarlo contra nada.`;
 
 /** Presenta la matriz de forma que el modelo pueda responder criterio por criterio. */
 function describirCriterios(criterios: CriterioParaEvaluar[]): string {
@@ -225,6 +229,8 @@ export async function evaluarConIa(
   documento: string,
   criterios: CriterioParaEvaluar[],
   metadatos: { titulo: string; tipoDocumental: string },
+  /** Catálogo normativo que sirve de referencia. Véase `base-conocimiento`. */
+  baseDeConocimiento = '',
 ): Promise<RespuestaDelMotor> {
   const client = crearCliente();
 
@@ -248,7 +254,10 @@ export async function evaluarConIa(
     // No se trunca el documento en silencio: si excede el tope, el usuario decide.
     const conteo = await client.messages.countTokens({
       model: MODELO,
-      system: [{ type: 'text', text: INSTRUCCIONES }],
+      system: [
+        { type: 'text', text: INSTRUCCIONES },
+        ...(baseDeConocimiento ? [{ type: 'text' as const, text: baseDeConocimiento }] : []),
+      ],
       messages: [{ role: 'user', content: contextoDocumento }],
     });
 
@@ -269,8 +278,18 @@ export async function evaluarConIa(
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high', format: esquemaDeSalida(criterios) },
       system: [
-        // El documento se cachea: reevaluarlo con otra matriz no vuelve a pagarlo.
+        // El documento y el catálogo se cachean: reevaluarlo con otra matriz
+        // no vuelve a pagar ni uno ni otro.
         { type: 'text', text: INSTRUCCIONES },
+        ...(baseDeConocimiento
+          ? [
+              {
+                type: 'text' as const,
+                text: baseDeConocimiento,
+                cache_control: { type: 'ephemeral' as const },
+              },
+            ]
+          : []),
         { type: 'text', text: contextoDocumento, cache_control: { type: 'ephemeral' } },
       ],
       messages: [{ role: 'user', content: instruccion }],

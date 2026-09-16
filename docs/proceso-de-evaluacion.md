@@ -276,6 +276,37 @@ siempre un resultado por cada `criterio_id` solicitado. El documento viaja en el
 bloque de sistema **con caché**: reevaluarlo con otra matriz no vuelve a pagar el
 documento entero.
 
+### El catálogo normativo entra como material de consulta
+
+Sin catálogo, el motor puede juzgar la forma de un documento y poco más:
+observa que una cita no está verificada, pero no si lo que el documento afirma
+se corresponde con lo que la norma dice. El catálogo es lo que convierte esa
+observación en un contraste (`src/lib/base-conocimiento.ts`).
+
+Se le entrega al motor, en este orden:
+
+1. **El índice completo del catálogo** —tipo, código, título, emisor, estado—.
+   Es barato y permite observar omisiones: «no invoca la directiva que regula
+   esta materia».
+2. **El texto de las normas que el documento cita** y que están en el catálogo.
+   Son las que un revisor abriría.
+3. **El texto de las normas que tratan la misma materia**, mientras quede
+   presupuesto. La pertinencia se mide contando cuántas palabras
+   significativas del título de la norma aparecen en el documento: es una
+   medida tosca, pero explicable, y la norma entra porque el documento habla
+   de lo que ella regula, no porque un modelo lo intuyera.
+
+El presupuesto es de 160 000 caracteres (`SACD_PRESUPUESTO_CATALOGO`) y ninguna
+norma se lleva más de 40 000: más vale una norma entera que diez truncadas.
+Lo que no cabe sigue figurando en el índice.
+
+Las normas que el documento cita y **no** están en el catálogo se listan
+aparte, con la instrucción de no pronunciarse sobre su contenido: de esas no
+hay nada que contrastar, y afirmar que la cita es correcta sería inventar.
+
+`GET /api/documents/[id]/base-conocimiento` muestra ese material sin ejecutar
+la evaluación, para saber de antemano sobre qué se apoyará el análisis.
+
 ### La regla que sostiene todo: la evidencia se verifica
 
 Un hallazgo vale por su evidencia. Si la cita que lo acompaña no está en el
@@ -382,6 +413,24 @@ Mientras no haya autenticación, la identidad sale de `src/lib/sesion.ts`, en un
 único punto. **La trazabilidad es nominal, no verificada**: registra un nombre,
 no prueba quién lo escribió. Incorporar el inicio de sesión es sustituir ese
 módulo.
+
+## El catálogo como línea base
+
+El catálogo se organiza por tipo —LEYES, DECRETOS, RESOLUCIONES, DIRECTIVAS,
+LINEAMIENTOS, GUÍAS, MANUALES, PROCEDIMIENTOS, PLANES, REGLAMENTOS— y por los
+tipos documentales del numeral 7.2 de la directiva de gestión documental
+(CARTAS, INFORMES, MEMORANDOS, OFICIOS), que sirven de antecedente.
+
+Elegir el tipo al incorporar es **obligatorio**: determina en qué pestaña queda
+la norma y qué evaluaciones la consultan. Deducirlo del archivo sería adivinar
+justo lo que quien carga sabe con certeza, y una norma mal clasificada acaba en
+«otros», donde nadie la busca.
+
+Al evaluar, se consulta toda la normativa del catálogo más los documentos del
+mismo tipo que el evaluado, que hacen de precedente
+(`tiposPertinentesPara`). Del Inventario Normativo se respeta el tipo que
+declara la fuente: la resolución que aprueba una directiva lleva código de
+resolución, pero lo que el catálogo debe guardar es una directiva.
 
 ## Matrices: modificación y eliminación
 

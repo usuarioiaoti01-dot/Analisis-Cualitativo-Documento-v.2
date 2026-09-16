@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { seedDatabase } from './seed';
 import { DOCUMENT_TYPES } from './types';
+import { extraerCitas } from './citas';
+import { clasificarTipo } from './tipos-normativos';
 
 /**
  * Persistencia sobre el SQLite que trae Node (`node:sqlite`, Node 22.5+). Se
@@ -193,7 +195,20 @@ function createSchema(db: DatabaseSync): void {
       created_at     INTEGER,
       -- Archivo de la norma, cuando se incorporó subiéndolo.
       file_name      TEXT,
-      storage_path   TEXT
+      storage_path   TEXT,
+      -- Tipo del catálogo: 'ley', 'directiva', 'informe'… Separa el catálogo
+      -- en espacios revisables y permite a la evaluación pedir solo lo suyo.
+      doc_type       TEXT NOT NULL DEFAULT 'otro'
+    );
+
+    -- Texto de cada norma del catálogo. Se guarda aparte porque una norma
+    -- extensa ocupa cientos de kilobytes y el listado no lo necesita nunca.
+    -- Es lo que permite que una evaluación razone sobre lo que la norma dice
+    -- y no solo sobre que existe.
+    CREATE TABLE IF NOT EXISTS norm_contents (
+      norm_id      INTEGER PRIMARY KEY REFERENCES norms(id) ON DELETE CASCADE,
+      content      TEXT NOT NULL,
+      extracted_at INTEGER NOT NULL
     );
 
     -- Etapa 6: coincidencias entre el documento evaluado y el repositorio.
@@ -265,6 +280,7 @@ function migrateSchema(db: DatabaseSync): void {
   addMissingColumns(db, 'document_similarities', [['containment', 'REAL NOT NULL DEFAULT 0']]);
 
   addMissingColumns(db, 'norms', [
+    ['doc_type', "TEXT NOT NULL DEFAULT 'otro'"],
     ['article', 'TEXT'],
     ['source_url', 'TEXT'],
     ['published_at', 'INTEGER'],
@@ -277,6 +293,7 @@ function migrateSchema(db: DatabaseSync): void {
   ]);
 
   normalizarTiposDocumentales(db);
+  clasificarNormasSinTipo(db);
 
   // `findings` cambió de forma por completo. En el esquema anterior nunca se
   // escribió ninguna fila, así que recrearla vacía no pierde nada; si una base
@@ -286,6 +303,32 @@ function migrateSchema(db: DatabaseSync): void {
     const { total } = db.prepare('SELECT COUNT(*) AS total FROM findings').get() as { total: number };
     db.exec(total > 0 ? 'ALTER TABLE findings RENAME TO findings_legacy' : 'DROP TABLE findings');
     createSchema(db);
+  }
+}
+
+/**
+ * Da tipo a las normas que se incorporaron antes de que el catálogo tuviera
+ * pestañas. Se deduce del código, que es donde está dicho: «Ley N.º 29763» es
+ * una ley y «RSG N.º 018-2017-SERFOR-SG» una resolución. Lo que no se
+ * reconozca queda en «otro», a la vista, para que alguien lo clasifique.
+ */
+function clasificarNormasSinTipo(db: DatabaseSync): void {
+  if (tableColumns(db, 'norms').size === 0) return;
+
+  const pendientes = db
+    .prepare("SELECT id, code FROM norms WHERE doc_type IS NULL OR doc_type = 'otro'")
+    .all() as { id: number; code: string }[];
+
+  if (pendientes.length === 0) return;
+
+  const actualizar = db.prepare('UPDATE norms SET doc_type = ? WHERE id = ?');
+
+  for (const norma of pendientes) {
+    const cita = extraerCitas(norma.code)[0];
+    // Sin cita reconocible se prueba con el propio código: los complementos
+    // empiezan por «Anexo de…», «Fe de erratas de…».
+    const tipo = clasificarTipo(cita?.tipo ?? norma.code);
+    if (tipo !== 'otro') actualizar.run(tipo, norma.id);
   }
 }
 

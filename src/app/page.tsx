@@ -134,6 +134,8 @@ export default function Page() {
           similitud?: { documentos_comparados: number; coincidencias: number };
         } | null;
         aviso_contraste?: string;
+        /** Parte del catálogo que el motor tuvo a la vista. */
+        catalogo: { normas: number; con_texto: number; citadas: number } | null;
       };
     }>('/api/evaluations', {
       method: 'POST',
@@ -154,6 +156,14 @@ export default function Page() {
       ].filter(Boolean);
       partes.push(`Fuera del análisis: ${fuera.join(' y ')}.`);
     }
+    if (resumen.catalogo) {
+      const { normas, con_texto, citadas } = resumen.catalogo;
+      partes.push(
+        `Catálogo consultado: ${normas} normas en el índice, ${con_texto} con su texto completo ` +
+          `(${citadas} de ellas citadas por el documento).`,
+      );
+    }
+
     const { contraste } = resumen;
     if (contraste) {
       const normativa = contraste.normativa;

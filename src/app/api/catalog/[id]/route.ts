@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic';
 const SELECT_NORMA = `
   SELECT id, code, title, issuer, subject, status, article, source_url,
          published_at, effective_from, effective_to, aliases, created_at,
-         file_name, storage_path
+         file_name, storage_path, doc_type
   FROM norms WHERE id = ?`;
 
 /** Campos que el evaluador puede corregir desde el catálogo. */
-const EDITABLES = ['code', 'title', 'issuer', 'subject', 'status', 'aliases'] as const;
+const EDITABLES = ['code', 'title', 'issuer', 'subject', 'status', 'aliases', 'doc_type'] as const;
 
 /**
  * PATCH /api/catalog/[id] — corrige los datos de una norma.

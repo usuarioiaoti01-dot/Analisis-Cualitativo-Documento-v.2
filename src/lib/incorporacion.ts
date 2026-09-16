@@ -4,7 +4,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { queryOne } from './sqlite';
 import { guardarArchivo } from './almacen';
 import { detectarFormato, extraerTexto } from './extraccion';
-import { clavesDeNorma } from './citas';
+import { clavesDeNorma, extraerCitas } from './citas';
+import { clasificarTipo } from './tipos-normativos';
 import { detectarMetadatos } from './norma-metadatos';
 import type { NormRecord, ResultadoIncorporacion } from './types';
 
@@ -23,7 +24,7 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const SELECT_NORMA = `
   SELECT id, code, title, issuer, subject, status, article, source_url,
          published_at, effective_from, effective_to, aliases, created_at,
-         file_name, storage_path
+         file_name, storage_path, doc_type
   FROM norms WHERE id = ?`;
 
 /**
@@ -72,6 +73,8 @@ export interface ArchivoParaCatalogo {
   tipo?: string;
   /** Procedencia, para dejarla anotada en el resultado. */
   origen?: string;
+  /** Tipo del catálogo al que pertenece. Lo elige quien carga o lo trae la fuente. */
+  docType?: string;
   /**
    * Ficha que ya trae la fuente. Cuando existe se usa tal cual y no se
    * consulta al modelo: el Inventario Normativo tiene el código y el título
@@ -216,8 +219,8 @@ export async function incorporarAlCatalogo(
     db
       .prepare(
         `INSERT INTO norms (code, title, issuer, subject, status, created_at, file_name,
-                            storage_path, source_url)
-         VALUES (?, ?, ?, ?, 'Vigente', ?, ?, ?, ?)`,
+                            storage_path, source_url, doc_type)
+         VALUES (?, ?, ?, ?, 'Vigente', ?, ?, ?, ?, ?)`,
       )
       .run(
         metadatos.code,
@@ -228,8 +231,16 @@ export async function incorporarAlCatalogo(
         archivo.nombre,
         storagePath,
         archivo.ficha?.sourceUrl ?? null,
+        // Si no se declaró el tipo, se deduce del código reconocido.
+        clasificarTipo(archivo.docType ?? extraerCitas(metadatos.code)[0]?.tipo ?? metadatos.code),
       ).lastInsertRowid,
   );
+
+  // El texto ya está extraído para identificar la norma: guardarlo aquí evita
+  // volver a abrir el archivo cada vez que una evaluación necesite consultarla.
+  db.prepare(
+    'INSERT OR REPLACE INTO norm_contents (norm_id, content, extracted_at) VALUES (?, ?, ?)',
+  ).run(id, texto, Date.now());
 
   return {
     ...base,

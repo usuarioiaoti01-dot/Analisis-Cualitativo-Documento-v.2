@@ -215,6 +215,8 @@ export interface NormRecord {
   created_at?: number | null;
   file_name?: string | null;
   storage_path?: string | null;
+  /** Tipo del catálogo: «ley», «directiva», «informe»… Véase `tipos-normativos`. */
+  doc_type?: string;
 }
 
 /** Resultado de incorporar un archivo al catálogo. */

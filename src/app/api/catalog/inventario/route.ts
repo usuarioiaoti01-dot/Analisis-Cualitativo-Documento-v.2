@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { queryAll } from '@/lib/sqlite';
 import { clavesDeNorma, extraerCitas } from '@/lib/citas';
+import { clasificarTipo } from '@/lib/tipos-normativos';
 import { incorporarAlCatalogo } from '@/lib/incorporacion';
 import {
   ErrorDeInventario,
@@ -43,6 +44,8 @@ export async function GET() {
 
   try {
     const documentos = await listarInventario();
+    sincronizarTipos(documentos);
+
     const presentes = clavesDelCatalogo();
     const traidas = procedenciasDelCatalogo();
 
@@ -127,6 +130,8 @@ async function traer(
       buffer,
       origen: 'el Inventario Normativo',
       ficha: fichaDe(documento),
+      // El inventario declara el tipo de cada documento: se respeta.
+      docType: clasificarTipo(documento.tipo),
     });
   } catch (error) {
     return {
@@ -202,6 +207,36 @@ function clavesDelCatalogo(): Set<string> {
     for (const clave of clavesDeNorma(fila.code, fila.aliases)) claves.add(clave);
   }
   return claves;
+}
+
+/**
+ * Pone al día el tipo de las normas que vinieron del inventario.
+ *
+ * El tipo lo declara la fuente —«Directiva», «Lineamientos»—, y es más fiable
+ * que deducirlo del código: la resolución que aprueba una directiva lleva
+ * código de resolución, pero lo que el catálogo debe guardar es una directiva.
+ * Las normas traídas antes de que el catálogo tuviera tipos quedaron
+ * clasificadas por su código, y aquí se corrigen solas.
+ */
+function sincronizarTipos(documentos: DocumentoDelInventario[]): void {
+  const db = getDb();
+  const actuales = queryAll<{ id: number; source_url: string; doc_type: string }>(
+    db,
+    "SELECT id, source_url, doc_type FROM norms WHERE source_url LIKE 'inventario://%'",
+  );
+
+  if (actuales.length === 0) return;
+
+  const tipoPorReferencia = new Map(
+    documentos.map((documento) => [`inventario://${documento.referencia}`, clasificarTipo(documento.tipo)]),
+  );
+
+  const actualizar = db.prepare('UPDATE norms SET doc_type = ? WHERE id = ?');
+
+  for (const norma of actuales) {
+    const declarado = tipoPorReferencia.get(norma.source_url);
+    if (declarado && declarado !== norma.doc_type) actualizar.run(declarado, norma.id);
+  }
 }
 
 /** Procedencias ya traídas del inventario. */

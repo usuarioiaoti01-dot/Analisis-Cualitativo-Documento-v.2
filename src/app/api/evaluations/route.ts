@@ -5,6 +5,8 @@ import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
 import { verificarCita, type SeccionUbicable } from '@/lib/evidencia';
 import { textoEvaluable } from '@/lib/tramite';
 import { ErrorDeContraste, ejecutarContraste } from '@/lib/contraste';
+import { construirBaseDeConocimiento } from '@/lib/base-conocimiento';
+import { tiposPertinentesPara } from '@/lib/tipos-normativos';
 import {
   ErrorDeMotor,
   MODELO,
@@ -137,12 +139,21 @@ async function evaluarConMotorIa(
   // así que las citas conservan su ubicación real.
   const evaluable = textoEvaluable(contenido.content, secciones);
 
+  // El catálogo normativo entra en la evaluación como material de consulta:
+  // sin él el motor puede juzgar la forma del documento, pero no si lo que
+  // afirma se corresponde con lo que dice la norma que invoca.
+  const base = await construirBaseDeConocimiento(db, evaluable.texto, {
+    tiposPertinentes: tiposPertinentesPara(documento.document_type),
+  });
+
   let respuesta;
   try {
-    respuesta = await evaluarConIa(evaluable.texto, criterios, {
-      titulo: documento.title,
-      tipoDocumental: documento.document_type,
-    });
+    respuesta = await evaluarConIa(
+      evaluable.texto,
+      criterios,
+      { titulo: documento.title, tipoDocumental: documento.document_type },
+      base.texto,
+    );
   } catch (error) {
     if (error instanceof ErrorDeMotor) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -243,6 +254,7 @@ async function evaluarConMotorIa(
     score,
     resultados,
     citasDescartadas,
+    base,
     seccionesOmitidas: evaluable.omitidas,
     lineasDePie: evaluable.lineasDePie,
     usage: respuesta.usage,
@@ -332,6 +344,8 @@ interface DatosAPersistir {
     }[];
   }[];
   citasDescartadas: number;
+  /** Catálogo que se puso a disposición del motor. */
+  base?: { incluidas: { code: string; motivo: string }[]; totalCatalogo: number };
   /** Secciones de carátula que quedaron fuera del análisis. */
   seccionesOmitidas?: number;
   /** Renglones de pie —copia, despedida, firma— que quedaron fuera. */
@@ -446,6 +460,13 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
         ...(avisoContraste ? { aviso_contraste: avisoContraste } : {}),
         citas_descartadas: datos.citasDescartadas,
         secciones_omitidas: datos.seccionesOmitidas ?? 0,
+        catalogo: datos.base
+          ? {
+              normas: datos.base.totalCatalogo,
+              con_texto: datos.base.incluidas.length,
+              citadas: datos.base.incluidas.filter((n) => n.motivo === 'citada').length,
+            }
+          : null,
         lineas_de_pie: datos.lineasDePie ?? 0,
         ...(datos.usage ? { tokens: datos.usage } : {}),
       },

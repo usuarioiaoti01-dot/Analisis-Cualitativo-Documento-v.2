@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import type { NormRecord, ResultadoIncorporacion } from '@/lib/types';
+import { TIPOS_DE_CATALOGO } from '@/lib/tipos-normativos';
 import { IncorporarNormasModal } from './IncorporarNormasModal';
 import { InventarioModal } from './InventarioModal';
 
@@ -50,16 +51,42 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
   const [informeAbierto, setInformeAbierto] = useState(false);
   const [subiendoAbierto, setSubiendoAbierto] = useState(false);
   const [inventarioAbierto, setInventarioAbierto] = useState(false);
+  /** Pestaña activa: un identificador de tipo, o «todas». */
+  const [tipoActivo, setTipoActivo] = useState('todas');
+
+  /**
+   * Pestañas: solo los tipos que tienen normas, en el orden del catálogo. Una
+   * pestaña vacía no informa de nada y estorba para llegar a las que sí tienen.
+   */
+  const pestanas = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const norm of norms) {
+      const tipo = norm.doc_type ?? 'otro';
+      conteo.set(tipo, (conteo.get(tipo) ?? 0) + 1);
+    }
+
+    return [
+      { id: 'todas', etiqueta: 'TODAS', total: norms.length },
+      ...TIPOS_DE_CATALOGO.filter((tipo) => conteo.has(tipo.id)).map((tipo) => ({
+        id: tipo.id,
+        etiqueta: tipo.etiqueta,
+        total: conteo.get(tipo.id) ?? 0,
+      })),
+    ];
+  }, [norms]);
 
   const encontradas = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return norms;
-    return norms.filter((norm) =>
-      [norm.code, norm.title, norm.issuer, norm.subject].some((campo) =>
+
+    return norms.filter((norm) => {
+      if (tipoActivo !== 'todas' && (norm.doc_type ?? 'otro') !== tipoActivo) return false;
+      if (!needle) return true;
+
+      return [norm.code, norm.title, norm.issuer, norm.subject].some((campo) =>
         campo.toLowerCase().includes(needle),
-      ),
-    );
-  }, [norms, query]);
+      );
+    });
+  }, [norms, query, tipoActivo]);
 
   const totalPaginas = Math.max(1, Math.ceil(encontradas.length / POR_PAGINA));
   // Al filtrar, la página actual puede quedar fuera de rango.
@@ -75,7 +102,7 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
   }, [resultados]);
 
   /** Sube uno o varios archivos; cada uno se informa por separado. */
-  async function incorporar(archivos: File[]) {
+  async function incorporar(archivos: File[], docType: string) {
     if (archivos.length === 0) return;
 
     setCargando(true);
@@ -84,6 +111,7 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
     try {
       const form = new FormData();
       for (const archivo of archivos) form.append('files', archivo);
+      form.append('doc_type', docType);
 
       const response = await fetch('/api/catalog/documentos', { method: 'POST', body: form });
       const payload = await response.json();
@@ -255,7 +283,33 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
         </p>
       )}
 
-      <label className="mt-5 flex items-center gap-2 rounded-lg border border-hairline px-3 py-2.5 focus-within:border-brand">
+      {/* El catálogo es la línea base de conocimiento de las evaluaciones: se
+          navega por tipo, que es como se revisa si está completo. */}
+      <nav
+        className="mt-6 flex flex-wrap gap-1 border-b border-hairline"
+        aria-label="Tipos del catálogo"
+      >
+        {pestanas.map((pestana) => (
+          <button
+            key={pestana.id}
+            type="button"
+            onClick={() => {
+              setTipoActivo(pestana.id);
+              setPagina(0);
+            }}
+            className={`border-b-2 px-4 py-2.5 text-xs font-semibold tracking-[0.08em] transition-colors ${
+              tipoActivo === pestana.id
+                ? 'border-brand text-brand'
+                : 'border-transparent text-ink-muted hover:text-ink'
+            }`}
+          >
+            {pestana.etiqueta}
+            <span className="ml-1.5 font-normal text-ink-muted">{pestana.total}</span>
+          </button>
+        ))}
+      </nav>
+
+      <label className="mt-4 flex items-center gap-2 rounded-lg border border-hairline px-3 py-2.5 focus-within:border-brand">
         <Search className="size-[18px] text-ink-muted" aria-hidden />
         <input
           type="search"

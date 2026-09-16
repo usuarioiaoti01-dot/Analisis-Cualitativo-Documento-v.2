@@ -59,7 +59,7 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Se pueden modificar y eliminar. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
-| **Catálogo normativo** | Incorporación de normas desde archivos, una o varias a la vez, con identificación automática de código, título, emisor y materia, o traídas del Inventario Normativo del SERFOR. Corrección y retiro por norma. Es lo que sustenta la validación de citas. |
+| **Catálogo normativo** | Línea base de conocimiento. Normas separadas por tipo en pestañas (LEYES, DIRECTIVAS, LINEAMIENTOS…), incorporadas desde archivos o traídas del Inventario Normativo del SERFOR. Sustenta la validación de citas y alimenta el análisis. |
 | **Matriz de Evaluación** | Sección propia. Composición de cada matriz —criterios, preguntas y pesos por dimensión—, creación, modificación y eliminación. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
@@ -74,6 +74,7 @@ Todas las rutas responden JSON.
 | `POST /api/documents` | Registra un documento. Con `multipart/form-data` (`file`, `document_type`) guarda el archivo y extrae su texto; con JSON (`{ title, document_type }`) registra solo la ficha. |
 | `GET /api/documents/[id]` | Ficha del documento con sus secciones, evaluaciones, resultados por criterio y hallazgos. |
 | `GET /api/documents/[id]/texto` | Texto extraído completo, aparte para no cargarlo en cada apertura de la ficha. |
+| `GET /api/documents/[id]/base-conocimiento` | Qué parte del catálogo consultará la evaluación de este documento, sin ejecutarla. |
 | `DELETE /api/documents/[id]` | Elimina el documento, su texto, secciones, evaluaciones, hallazgos y el archivo original. Disponible desde la ficha del documento, con confirmación. |
 | `GET /api/documents/[id]/archivo` | Devuelve el archivo original tal como se cargó. |
 | `POST /api/documents/[id]/contraste` | Ejecuta las etapas 5 y 6 y emite hallazgos. Cuerpo opcional: `{ etapas: ['normativa', 'similitud'] }`. |
