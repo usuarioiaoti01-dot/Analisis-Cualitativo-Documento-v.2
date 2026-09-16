@@ -8,6 +8,7 @@ import {
   Gavel,
   LayoutGrid,
   Settings,
+  SlidersHorizontal,
   ShieldCheck,
   Users,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const ICONS = {
   resumen: LayoutGrid,
   documentos: Copy,
   evaluaciones: ClipboardCheck,
+  matrices: SlidersHorizontal,
   catalogo: Gavel,
   usuarios: Users,
   configuracion: Settings,

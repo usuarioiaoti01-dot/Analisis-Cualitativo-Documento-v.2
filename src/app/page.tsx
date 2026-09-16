@@ -6,6 +6,7 @@ import { CatalogoView } from '@/components/CatalogoView';
 import { DocumentoDetalle } from '@/components/DocumentoDetalle';
 import { DocumentosView } from '@/components/DocumentosView';
 import { EvaluacionesView, type Motor } from '@/components/EvaluacionesView';
+import { MatricesView } from '@/components/MatricesView';
 import { ModuloPendiente } from '@/components/ModuloPendiente';
 import { NuevaMatrizModal } from '@/components/NuevaMatrizModal';
 import { ResumenView } from '@/components/ResumenView';
@@ -260,6 +261,12 @@ export default function Page() {
               templates={templates}
               motor={motor}
               onRun={runEvaluation}
+            />
+          )}
+
+          {section === 'matrices' && (
+            <MatricesView
+              templates={templates}
               onNewTemplate={() => {
                 setMatrizEnEdicion(null);
                 setMatrixOpen(true);
