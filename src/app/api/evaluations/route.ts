@@ -4,6 +4,7 @@ import { getDb } from '@/lib/db';
 import { inTransaction, queryAll, queryOne } from '@/lib/sqlite';
 import { verificarCita, type SeccionUbicable } from '@/lib/evidencia';
 import { textoEvaluable } from '@/lib/tramite';
+import { ErrorDeContraste, ejecutarContraste } from '@/lib/contraste';
 import {
   ErrorDeMotor,
   MODELO,
@@ -406,6 +407,26 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
     ).run(status, score, severity, now, datos.documentId);
   });
 
+  // Etapas 5 y 6, a continuación de la 4. Son deterministas y rápidas, y sin
+  // ellas la evaluación deja sin comprobar las citas y las coincidencias con
+  // el repositorio. Corren también con el motor provisional: no dependen del
+  // análisis del contenido.
+  //
+  // Un fallo aquí no invalida la evaluación, que ya está guardada: se informa
+  // y se sigue, porque perder el puntaje por un tropiezo del contraste sería
+  // peor que quedarse sin contraste.
+  let contraste: ReturnType<typeof ejecutarContraste> | null = null;
+  let avisoContraste: string | null = null;
+
+  try {
+    contraste = ejecutarContraste(db, datos.documentId);
+  } catch (error) {
+    avisoContraste =
+      error instanceof ErrorDeContraste
+        ? error.message
+        : 'No fue posible ejecutar el contraste normativo y de repositorio.';
+  }
+
   return NextResponse.json(
     {
       evaluation: {
@@ -419,6 +440,10 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
       resumen: {
         criterios: datos.resultados.length,
         hallazgos: hallazgosGuardados,
+        contraste: contraste
+          ? { hallazgos: contraste.hallazgos, ...contraste.resumen }
+          : null,
+        ...(avisoContraste ? { aviso_contraste: avisoContraste } : {}),
         citas_descartadas: datos.citasDescartadas,
         secciones_omitidas: datos.seccionesOmitidas ?? 0,
         lineas_de_pie: datos.lineasDePie ?? 0,

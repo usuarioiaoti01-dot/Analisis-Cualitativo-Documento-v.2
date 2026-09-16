@@ -127,6 +127,13 @@ export default function Page() {
         citas_descartadas: number;
         secciones_omitidas?: number;
         lineas_de_pie?: number;
+        /** Etapas 5 y 6, que corren al terminar la evaluación. */
+        contraste: {
+          hallazgos: number;
+          normativa?: { citas_detectadas: number; normas_distintas: number; verificadas: number };
+          similitud?: { documentos_comparados: number; coincidencias: number };
+        } | null;
+        aviso_contraste?: string;
       };
     }>('/api/evaluations', {
       method: 'POST',
@@ -147,6 +154,18 @@ export default function Page() {
       ].filter(Boolean);
       partes.push(`Fuera del análisis: ${fuera.join(' y ')}.`);
     }
+    const { contraste } = resumen;
+    if (contraste) {
+      const normativa = contraste.normativa;
+      const similitud = contraste.similitud;
+      partes.push(
+        `Contraste: ${normativa?.verificadas ?? 0} de ${normativa?.normas_distintas ?? 0} ` +
+          `norma(s) citada(s) verificadas contra el catálogo; ` +
+          `${similitud?.coincidencias ?? 0} coincidencia(s) en ${similitud?.documentos_comparados ?? 0} ` +
+          `documento(s) del repositorio, con ${contraste.hallazgos} hallazgo(s).`,
+      );
+    }
+    if (resumen.aviso_contraste) partes.push(resumen.aviso_contraste);
     if (resumen.citas_descartadas > 0) {
       partes.push(
         `${resumen.citas_descartadas} hallazgo(s) se descartaron porque su cita no se encontró en el documento.`,

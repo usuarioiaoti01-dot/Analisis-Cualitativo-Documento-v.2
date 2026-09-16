@@ -118,11 +118,26 @@ Queda ruido inevitable en documentos con muchas tablas y formularios: las filas
 de una tabla en mayúsculas se parecen a un título. Resolverlo requiere
 reconocer tablas en la extracción, que es un trabajo aparte.
 
+## Etapas 5 y 6: cuándo corren
+
+Las dos corren **solas, al terminar la evaluación** (`POST /api/evaluations`), y
+su resultado viaja en `resumen.contraste`. Antes dependían de que alguien
+pulsara un botón, y una etapa que hay que acordarse de lanzar es una etapa que
+la mitad de los expedientes no tiene.
+
+Corren también con el motor provisional: ninguna de las dos analiza el
+contenido con un modelo, así que no dependen de la etapa 4.
+
+Un fallo del contraste **no invalida la evaluación**, que ya está guardada: se
+informa en `resumen.aviso_contraste` y el puntaje se conserva. `POST
+/api/documents/[id]/contraste` sigue existiendo para repetirlas —enteras o una
+sola— sin volver a evaluar.
+
 ## Etapa 5 — validación legal y normativa
 
-`POST /api/documents/[id]/contraste` reconoce las citas normativas del texto por
-coincidencia de patrones y las contrasta contra el catálogo. **No usa modelos de
-lenguaje**: corre entera dentro del perímetro de la entidad.
+Reconoce las citas normativas del texto por coincidencia de patrones y las
+contrasta contra el catálogo. **No usa modelos de lenguaje**: corre entera
+dentro del perímetro de la entidad.
 
 El reconocimiento separa el tipo del número y normaliza ambos, de modo que
 «Ley N° 29763», «Ley N.º 29763» y «Ley 29763» se resuelvan a la misma norma.
