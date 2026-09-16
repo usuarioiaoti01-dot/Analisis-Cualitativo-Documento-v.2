@@ -83,7 +83,7 @@ export const DEFAULT_CRITERIA: CriterioPlantilla[] = [
 
 const MATRIZ_INFORME_TECNICO: MatrizPlantilla = {
   name: 'Matriz de informe técnico',
-  documentType: 'Informe técnico',
+  documentType: 'Informe Técnico',
   criteria: [
     {
       dimension: 'Contenido',
@@ -339,7 +339,7 @@ const MATRIZ_NORMATIVO: MatrizPlantilla = {
 
 /** Matrices que se instalan en la primera ejecución, una por tipo documental. */
 export const MATRICES_POR_TIPO: MatrizPlantilla[] = [
-  { name: 'Matriz general de calidad documental', documentType: 'Informe técnico', criteria: DEFAULT_CRITERIA },
+  { name: 'Matriz general de calidad documental', documentType: 'Informe Técnico', criteria: DEFAULT_CRITERIA },
   MATRIZ_INFORME_TECNICO,
   MATRIZ_TDR,
   MATRIZ_OFICIO,

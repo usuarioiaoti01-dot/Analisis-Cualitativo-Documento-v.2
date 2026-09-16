@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { seedDatabase } from './seed';
+import { DOCUMENT_TYPES } from './types';
 
 /**
  * Persistencia sobre el SQLite que trae Node (`node:sqlite`, Node 22.5+). Se
@@ -275,6 +276,8 @@ function migrateSchema(db: DatabaseSync): void {
     ['storage_path', 'TEXT'],
   ]);
 
+  normalizarTiposDocumentales(db);
+
   // `findings` cambió de forma por completo. En el esquema anterior nunca se
   // escribió ninguna fila, así que recrearla vacía no pierde nada; si una base
   // tuviera filas, se conserva la tabla vieja bajo otro nombre.
@@ -283,6 +286,28 @@ function migrateSchema(db: DatabaseSync): void {
     const { total } = db.prepare('SELECT COUNT(*) AS total FROM findings').get() as { total: number };
     db.exec(total > 0 ? 'ALTER TABLE findings RENAME TO findings_legacy' : 'DROP TABLE findings');
     createSchema(db);
+  }
+}
+
+/**
+ * Ajusta los tipos documentales guardados a los nombres de la directiva.
+ *
+ * El tipo se escribía «Informe técnico» y la directiva lo nombra «Informe
+ * Técnico». La diferencia es de una mayúscula, pero el emparejamiento entre un
+ * documento y su matriz es por igualdad de cadena: sin esto, una matriz
+ * quedaría sin aplicarse a los documentos que ya existían.
+ */
+function normalizarTiposDocumentales(db: DatabaseSync): void {
+  const actualizar = (tabla: string) =>
+    db.prepare(
+      `UPDATE ${tabla} SET document_type = ?
+       WHERE lower(document_type) = lower(?) AND document_type <> ?`,
+    );
+
+  for (const tabla of ['documents', 'templates']) {
+    if (tableColumns(db, tabla).size === 0) continue;
+    const sentencia = actualizar(tabla);
+    for (const tipo of DOCUMENT_TYPES) sentencia.run(tipo, tipo, tipo);
   }
 }
 

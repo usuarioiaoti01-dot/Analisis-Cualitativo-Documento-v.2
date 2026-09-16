@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   BookOpen,
   Check,
+  Database,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -13,6 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import type { NormRecord, ResultadoIncorporacion } from '@/lib/types';
+import { IncorporarNormasModal } from './IncorporarNormasModal';
+import { InventarioModal } from './InventarioModal';
 
 const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
   incorporada: 'text-sev-low-ink',
@@ -20,8 +23,6 @@ const ESTADO_TONE: Record<ResultadoIncorporacion['estado'], string> = {
   sin_identificar: 'text-sev-medium-ink',
   error: 'text-sev-high-ink',
 };
-
-const ACEPTADOS = '.pdf,.docx,.xlsx';
 
 /** Normas por página. Un catálogo de decenas de normas no se navega en una lista única. */
 const POR_PAGINA = 10;
@@ -40,8 +41,6 @@ interface CatalogoViewProps {
 }
 
 export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoViewProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
   const [query, setQuery] = useState('');
   const [cargando, setCargando] = useState(false);
   const [resultados, setResultados] = useState<ResultadoIncorporacion[] | null>(null);
@@ -49,6 +48,8 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
   const [editando, setEditando] = useState<number | null>(null);
   const [pagina, setPagina] = useState(0);
   const [informeAbierto, setInformeAbierto] = useState(false);
+  const [subiendoAbierto, setSubiendoAbierto] = useState(false);
+  const [inventarioAbierto, setInventarioAbierto] = useState(false);
 
   const encontradas = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -74,15 +75,15 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
   }, [resultados]);
 
   /** Sube uno o varios archivos; cada uno se informa por separado. */
-  async function incorporar(archivos: FileList | null) {
-    if (!archivos || archivos.length === 0) return;
+  async function incorporar(archivos: File[]) {
+    if (archivos.length === 0) return;
 
     setCargando(true);
     setResultados(null);
     setAviso(null);
     try {
       const form = new FormData();
-      for (const archivo of Array.from(archivos)) form.append('files', archivo);
+      for (const archivo of archivos) form.append('files', archivo);
 
       const response = await fetch('/api/catalog/documentos', { method: 'POST', body: form });
       const payload = await response.json();
@@ -99,7 +100,33 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
       await onRecargar();
     } finally {
       setCargando(false);
-      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  /** Trae del Inventario Normativo las fichas elegidas. */
+  async function traerDelInventario(referencias: string[]) {
+    setCargando(true);
+    setResultados(null);
+    setAviso(null);
+    try {
+      const response = await fetch('/api/catalog/inventario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referencias }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok && !payload.resultados) {
+        setAviso(payload.error ?? 'No fue posible traer las normas del inventario.');
+        return;
+      }
+
+      setResultados(payload.resultados);
+      setInformeAbierto(payload.resultados.length <= 5);
+      setPagina(0);
+      await onRecargar();
+    } finally {
+      setCargando(false);
     }
   }
 
@@ -143,24 +170,26 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACEPTADOS}
-            multiple
-            className="hidden"
-            onChange={(event) => incorporar(event.target.files)}
-          />
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => setSubiendoAbierto(true)}
             disabled={cargando}
             className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-strong disabled:opacity-60"
           >
             <Upload className="size-[18px]" aria-hidden />
             {cargando ? 'Incorporando…' : 'Incorporar normas'}
           </button>
-          <p className="text-xs text-ink-muted">PDF, DOCX o XLSX · una o varias a la vez</p>
+          <p className="text-xs text-ink-muted">Word (DOCX), PDF o XLSX · una o varias a la vez</p>
+
+          <button
+            type="button"
+            onClick={() => setInventarioAbierto(true)}
+            disabled={cargando}
+            className="flex items-center gap-2 rounded-lg border border-hairline px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-60"
+          >
+            <Database className="size-[18px]" aria-hidden />
+            Traer del Inventario Normativo
+          </button>
 
           {norms.length === 0 && (
             <button
@@ -302,6 +331,19 @@ export function CatalogoView({ norms, onRecargar, onLoadPriority }: CatalogoView
             </button>
           </div>
         </div>
+      )}
+      {subiendoAbierto && (
+        <IncorporarNormasModal
+          onClose={() => setSubiendoAbierto(false)}
+          onSubmit={incorporar}
+        />
+      )}
+
+      {inventarioAbierto && (
+        <InventarioModal
+          onClose={() => setInventarioAbierto(false)}
+          onTraer={traerDelInventario}
+        />
       )}
     </section>
   );

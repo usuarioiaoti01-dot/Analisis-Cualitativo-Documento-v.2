@@ -44,8 +44,15 @@ interface DocumentosViewProps {
  * la elección es del usuario y el botón lleva al módulo de evaluaciones.
  */
 function matricesPara(templates: TemplateRecord[], documento: DocumentRecord): TemplateRecord[] {
+  // La comparación ignora mayúsculas y acentos: «Informe Técnico» e «Informe
+  // tecnico» son el mismo tipo, y una diferencia de tecleo no debería dejar un
+  // documento sin su matriz.
+  const igual = (a: string, b: string) =>
+    a.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() ===
+    b.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
   return templates.filter(
-    (template) => template.active === 1 && template.document_type === documento.document_type,
+    (template) => template.active === 1 && igual(template.document_type, documento.document_type),
   );
 }
 

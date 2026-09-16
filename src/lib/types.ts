@@ -5,12 +5,27 @@ export type DocumentStatus = 'pending' | 'in_review' | 'observed' | 'compliant';
 export type Severity = 'low' | 'medium' | 'high';
 
 /** Tipos documentales admitidos por el evaluador. */
+/**
+ * Tipos documentales, con los nombres del numeral 7.2 de la Directiva de
+ * Gestión Documental del SERFOR. Se usan tal como los nombra la directiva
+ * para que el tipo registrado aquí sea el mismo que consta en el sistema de
+ * gestión documental, y no una traducción libre que luego nadie sepa casar.
+ *
+ * Los tres últimos no son documentos de trámite sino productos que la
+ * Dirección de Políticas evalúa; no están en esa tabla y se conservan.
+ */
 export const DOCUMENT_TYPES = [
-  'Informe técnico',
+  'Carta',
+  'Carta Múltiple',
+  'Informe',
+  'Informe Legal',
+  'Informe Técnico',
+  'Memorando',
+  'Memorando Múltiple',
+  'Oficio',
+  'Oficio Múltiple',
   'TDR',
   'Proyecto normativo',
-  'Memorando',
-  'Oficio',
   'Directiva',
 ] as const;
 

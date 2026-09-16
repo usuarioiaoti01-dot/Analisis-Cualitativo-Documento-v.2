@@ -59,7 +59,8 @@ La aplicación queda en <http://localhost:3000>. La base SQLite se crea sola en
 | **Resumen** | Panel de indicadores, calidad por dimensión y bandeja de hallazgos, calculados sobre la base. Con el repositorio vacío muestra ceros. |
 | **Documentos** | Repositorio documental persistido. Carga real de archivos (PDF, DOCX, XLSX) con extracción de texto, listado y vista de detalle con el contenido extraído. |
 | **Evaluaciones** | Cinco matrices precargadas por tipo documental, con escala 1–5 e indicadores. Se pueden modificar y eliminar. Evalúa el contenido con IA y guarda el resultado de cada criterio con sus hallazgos. |
-| **Catálogo normativo** | Incorporación de normas desde archivos, una o varias a la vez, con identificación automática de código, título, emisor y materia. Corrección y retiro por norma. Es lo que sustenta la validación de citas. |
+| **Catálogo normativo** | Incorporación de normas desde archivos, una o varias a la vez, con identificación automática de código, título, emisor y materia, o traídas del Inventario Normativo del SERFOR. Corrección y retiro por norma. Es lo que sustenta la validación de citas. |
+| **Matriz de Evaluación** | Sección propia. Composición de cada matriz —criterios, preguntas y pesos por dimensión—, creación, modificación y eliminación. |
 | **Usuarios y roles** | Marcador; sin implementación. |
 | **Configuración** | Marcador; sin implementación. |
 
@@ -91,6 +92,8 @@ Todas las rutas responden JSON.
 | `GET /api/catalog` | Normas del catálogo. |
 | `POST /api/catalog` | Incorpora las 10 referencias prioritarias del inventario interno. |
 | `POST /api/catalog/documentos` | Incorpora una o varias normas desde sus archivos, identificándolas automáticamente. |
+| `GET /api/catalog/inventario` | Lista la normativa del Inventario Normativo del SERFOR y marca la que ya está aquí. |
+| `POST /api/catalog/inventario` | Trae al catálogo las fichas indicadas (`{ referencias: ['documentos:12'] }`). |
 | `PATCH /api/catalog/[id]` | Corrige los datos de una norma. |
 | `DELETE /api/catalog/[id]` | Retira una norma del catálogo. |
 
@@ -136,6 +139,32 @@ La extracción nunca impide el registro: si falla, el documento queda guardado c
 el motivo anotado en `extraction_notes` y visible en la vista de detalle. Los
 estados posibles son `ok`, `empty` (PDF escaneado, sin texto seleccionable),
 `failed` y `none` (ficha registrada sin archivo).
+
+### Enlace con el Inventario Normativo
+
+El [Inventario Normativo del SERFOR](https://github.com/usuarioiaoti01-dot/Inventario-Normativo-SERFOR)
+es el repositorio institucional de la normativa: sus fichas viven en Postgres
+(Supabase) y sus archivos en un bucket privado. Mantener aquí una segunda copia
+cargada a mano significaría que las dos se separan en cuanto alguien añada una
+norma en una sola de ellas.
+
+«Traer del Inventario Normativo», en el catálogo, lista lo que hay allí, marca
+lo que ya está aquí y trae lo que se elija. Cada archivo traído pasa por la
+misma incorporación que una carga manual, así que se identifica igual y no
+duplica fichas.
+
+**Autenticación.** Las políticas del inventario exigen sesión iniciada, de modo
+que su clave pública no basta. Se inicia sesión con una cuenta del propio
+inventario —conviene que sea de solo lectura— definida en `.env.local`:
+
+```
+SACD_INVENTARIO_USUARIO=lector@serfor.gob.pe
+SACD_INVENTARIO_CLAVE=…
+```
+
+No se usa la clave `service_role`: salta todas las reglas de acceso, y para
+leer un catálogo no hace falta ese poder. Sin credenciales, la ventana lo
+explica y la carga manual sigue disponible.
 
 ### Vista previa del original
 
