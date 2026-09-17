@@ -90,14 +90,34 @@ export interface CriterionRecord {
 }
 
 /** Resultado cualitativo de un criterio. */
-export type CriterionOutcome = 'cumple' | 'parcial' | 'no_cumple' | 'no_aplica';
+/**
+ * Veredictos de la skill «analisis-documental-general»: C, CP, NC, NA y NE.
+ *
+ * `no_evaluable` es el que faltaba y el que más importa: «no encontré prueba»
+ * y «probé que no cumple» son cosas distintas, y confundirlas es lo que más
+ * rápido destruye la credibilidad de un dictamen automatizado. Un criterio sin
+ * cita literal verificable es NE, nunca NC.
+ */
+export type CriterionOutcome =
+  | 'cumple'
+  | 'parcial'
+  | 'no_cumple'
+  | 'no_aplica'
+  | 'no_evaluable';
 
 export const OUTCOME_LABEL: Record<CriterionOutcome, string> = {
   cumple: 'Cumple',
   parcial: 'Cumple parcialmente',
   no_cumple: 'No cumple',
   no_aplica: 'No aplica',
+  no_evaluable: 'No evaluable',
 };
+
+/** Criticidad de un criterio, según el perfil del documento. */
+export type Criticidad = 'alta' | 'media' | 'baja';
+
+/** Principio de la ISO 24495-1 en que se funda el veredicto. */
+export type PrincipioIso = 'encuentra' | 'entiende' | 'usa' | 'relevante';
 
 /** Nivel de riesgo de un hallazgo. */
 export type Risk = 'bajo' | 'medio' | 'alto' | 'critico';
@@ -171,6 +191,15 @@ export interface EvaluationResultRecord {
   raw_score: number | null;
   weighted_score: number | null;
   comment: string | null;
+  /** Por qué la evidencia sustenta el veredicto, invocando el principio o la métrica. */
+  fundamento?: string | null;
+  criticidad?: Criticidad | null;
+  principio_iso?: PrincipioIso | null;
+  /** 0 a 1. Por debajo de 0,70 el criterio se escala a revisión humana. */
+  confianza?: number | null;
+  /** 1 cuando el criterio debe revisarlo una persona. */
+  escalado?: 0 | 1;
+  motivo_escalamiento?: string | null;
   /** Datos del criterio, incorporados por la consulta de detalle. */
   criterion_description?: string;
   criterion_indicator?: string | null;
@@ -189,6 +218,12 @@ export interface EvaluationRecord {
   validated_by: string | null;
   validated_at: number | null;
   validation_note: string | null;
+  /** Medición objetiva de la skill, en JSON. */
+  metricas?: string | null;
+  /** Encuadre aplicado —lector previsto y función—, en JSON. */
+  perfil?: string | null;
+  /** Consolidación cualitativa de la dimensión, en JSON. */
+  consolidado?: string | null;
 }
 
 export interface TemplateRecord {
@@ -256,6 +291,9 @@ export interface FindingRecord {
   section_id: number | null;
   recommendation: string | null;
   /** Norma o documento con el que se contrastó. */
+  /** Reescritura propuesta del pasaje citado, cuando procede. */
+  rewrite?: string | null;
+  rewrite_note?: string | null;
   reference_kind: string | null;
   reference_id: string | null;
   reference_label: string | null;

@@ -276,6 +276,59 @@ siempre un resultado por cada `criterio_id` solicitado. El documento viaja en el
 bloque de sistema **con caché**: reevaluarlo con otra matriz no vuelve a pagar el
 documento entero.
 
+### El método: la skill «analisis-documental-general»
+
+El motor no improvisa un procedimiento: aplica el de la skill del SERFOR, que
+vive en `skills/analisis-documental-general/` dentro de este repositorio. La
+skill se copió aquí a propósito —y no se enlaza desde fuera— porque el método
+con el que se emitió un dictamen debe poder reconstruirse tal como estaba ese
+día.
+
+El reparto es explícito y lo ordena la propia skill: **el método es suyo, los
+criterios son de la matriz aprobada de la entidad**. La rúbrica D4 de la skill
+sirve para interpretar los criterios de la matriz y derivar su criticidad, no
+para sustituirlos ni para añadir criterios que la matriz no contiene.
+
+Qué aporta, y qué cambió por tenerlo:
+
+**1. El encuadre antes del juicio.** Cada documento se sitúa en dos ejes —quién
+lo lee (`ciudadano`, `externo`, `interno`) y qué hace (`decide`, `regula`,
+`sustenta`, `informa`, `registra`)— con los preajustes de la rúbrica. De ese par
+salen la criticidad de cada criterio y los umbrales métricos. El encuadre se
+declara en el resultado, para que quien revise pueda discutirlo antes que los
+hallazgos.
+
+**2. El veredicto NE.** Es el que faltaba. «No encontré prueba» y «probé que no
+cumple» son cosas distintas, y confundirlas es lo que más rápido destruye la
+credibilidad de un dictamen automatizado. Un criterio sin cita literal es NE,
+nunca NC; y NE no cuenta como cumplimiento, bloquea el «Cumple» y escala a
+revisión humana.
+
+**3. Medición objetiva antes de opinar.** `scripts/metricas_claridad.py`, el
+script que la skill empaqueta, se ejecuta sobre el texto evaluable y entrega
+legibilidad (Szigriszt-Pazos con escala INFLESZ, Fernández Huerta), longitud de
+oración, voz pasiva, subordinación, nominalización, siglas sin desarrollar y los
+pasajes críticos ya extraídos literalmente. Esos números se le dan al modelo
+hechos: estimarlos a ojo produce valores distintos en cada corrida. Requiere
+Python en el servidor (`SACD_PYTHON` si no es `python`); si falta, la evaluación
+sigue y se le dice al modelo que no afirme nada numérico sobre legibilidad.
+
+**4. Criticidad, confianza y escalamiento.** Cada criterio trae su criticidad,
+su fundamento —el principio ISO o la métrica que sostiene el veredicto— y una
+confianza de 0 a 1. El escalamiento a revisión humana no se le pregunta al
+modelo: es una regla que aplica el servidor —todo NE, todo NC de criticidad
+alta, toda confianza menor que 0,70—.
+
+**5. Reescritura del pasaje.** Los hallazgos pueden traer la corrección
+propuesta del pasaje citado, conservando el contenido jurídico, con su salvedad
+cuando la propuesta contiene un dato que el documento no provee.
+
+**6. Consolidación cualitativa.** Además del puntaje ponderado, la evaluación
+guarda el resultado de la dimensión según la regla de la skill, que no es un
+promedio: basta un NC de criticidad alta para «No cumple». Ambos conviven porque
+responden preguntas distintas —cuánto y qué—, y la regla cualitativa es la que
+manda para la conformidad.
+
 ### El catálogo normativo entra como material de consulta
 
 Sin catálogo, el motor puede juzgar la forma de un documento y poco más:

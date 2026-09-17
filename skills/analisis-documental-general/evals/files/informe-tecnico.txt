@@ -1,0 +1,37 @@
+INFORME TÉCNICO N° 0142-2026-SERFOR-OTI
+
+A       : Ing. Carlos Vásquez Ríos
+          Gerente General
+
+DE      : Mg. Martín Montoya Neyra
+          Director de la Oficina de Tecnologías de la Información
+
+ASUNTO  : Opinión técnica
+
+REFERENCIA : Memorando N° 0987-2026-SERFOR-DGPCFFS
+
+FECHA   : Lima, 14 de setiembre de 2026
+
+I. ANTECEDENTES
+
+Tengo el agrado de dirigirme a usted en atención al documento de la referencia, mediante el cual la Dirección General de Política y Competitividad Forestal y de Fauna Silvestre solicita a esta Oficina la emisión de la opinión técnica respecto de la viabilidad de la implementación del módulo informático de regencia forestal, en el marco de lo dispuesto por la normativa vigente sobre la materia y considerando que dicho requerimiento fue formulado oportunamente por la referida Dirección General, por lo que, habiéndose efectuado la evaluación correspondiente por parte de los profesionales de esta Oficina, y siendo que la misma fue realizada de manera adecuada conforme a los lineamientos institucionales que resultan aplicables, se procede a emitir el pronunciamiento respectivo a efectos de que se adopten las acciones que correspondan.
+
+Mediante el Informe N° 0055-2026-SERFOR-DGPCFFS, la citada Dirección General remitió la propuesta funcional. Cabe señalar que dicha propuesta fue evaluada. Es preciso indicar que la evaluación consideró los aspectos técnicos pertinentes.
+
+II. ANÁLISIS
+
+El sistema SNIFFS se encuentra operativo. La integración con el PIDE requiere la suscripción del convenio correspondiente, el mismo que deberá ser tramitado ante la SGTD según corresponda.
+
+Se han identificado diversas deficiencias en la propuesta funcional. Fueron detectados vacíos en la definición de los perfiles de usuario. No fue precisado el alcance de la interoperabilidad con el MC-SNIFFS. El presupuesto será estimado en su momento, de ser necesario.
+
+Prima facie, la solución resulta idónea desde el punto de vista tecnológico, sin perjuicio de que, ut supra, se hayan señalado diversos aspectos que deberán ser considerados oportunamente por el área usuaria a efectos de dar cumplimiento a lo establecido, entre otros, en los documentos normativos que rigen la materia y que fueron oportunamente puestos en conocimiento de la referida Dirección General mediante el memorando que en su momento fuera cursado por esta Oficina.
+
+La infraestructura actual soportaría la carga adicional. El licenciamiento se encuentra vigente. Los servidores operan al 60 % de su capacidad.
+
+III. CONCLUSIONES
+
+3.1 La implementación del módulo de regencia forestal resulta técnicamente viable.
+
+3.2 Se recomienda que el área usuaria complete la propiedad funcional en los extremos observados.
+
+Sin otro particular, es cuanto informo a usted para los fines pertinentes.

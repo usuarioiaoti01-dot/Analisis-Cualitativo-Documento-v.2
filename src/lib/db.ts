@@ -127,7 +127,14 @@ function createSchema(db: DatabaseSync): void {
       -- Etapa 7: la decisión final es humana y queda registrada.
       validated_by TEXT,
       validated_at INTEGER,
-      validation_note TEXT
+      validation_note TEXT,
+      -- Medición objetiva y encuadre de la skill, en JSON. Se persisten para
+      -- que el dictamen pueda reconstruirse: la reproducibilidad depende de
+      -- saber con qué números y con qué perfil se evaluó.
+      metricas     TEXT,
+      perfil       TEXT,
+      -- Consolidación cualitativa de la dimensión, que no es el promedio.
+      consolidado  TEXT
     );
 
     -- Etapa 4: resultado de cada criterio, no solo el puntaje global.
@@ -136,13 +143,21 @@ function createSchema(db: DatabaseSync): void {
       evaluation_id TEXT NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
       criterion_id  INTEGER NOT NULL REFERENCES criteria(id),
       dimension     TEXT NOT NULL,
-      -- 'cumple' | 'parcial' | 'no_cumple' | 'no_aplica'
+      -- 'cumple' | 'parcial' | 'no_cumple' | 'no_aplica' | 'no_evaluable'
       result        TEXT NOT NULL,
       -- Puntaje en la escala del criterio (1 a scale_max); nulo si no aplica.
       raw_score     INTEGER,
       -- Aporte del criterio al puntaje final, ya ponderado sobre 100.
       weighted_score REAL,
-      comment       TEXT
+      comment       TEXT,
+      -- Método de la skill: por qué la evidencia sustenta el veredicto.
+      fundamento    TEXT,
+      criticidad    TEXT,
+      principio_iso TEXT,
+      confianza     REAL,
+      -- Escalamiento a revisión humana: NE, NC de criticidad alta o confianza < 0,70.
+      escalado      INTEGER NOT NULL DEFAULT 0,
+      motivo_escalamiento TEXT
     );
 
     -- Etapas 4 a 6: todo hallazgo nace de un criterio y cita su evidencia.
@@ -164,6 +179,10 @@ function createSchema(db: DatabaseSync): void {
       evidence_location TEXT,
       section_id    INTEGER REFERENCES document_sections(id) ON DELETE SET NULL,
       recommendation TEXT,
+      -- Reescritura propuesta del pasaje observado y su salvedad, cuando el
+      -- pasaje admite corrección sin decidir lo que toca al área usuaria.
+      rewrite        TEXT,
+      rewrite_note   TEXT,
       -- Norma o documento con el que se contrastó.
       reference_kind TEXT,
       reference_id   TEXT,
@@ -270,7 +289,24 @@ function migrateSchema(db: DatabaseSync): void {
     ['archived', 'INTEGER NOT NULL DEFAULT 0'],
   ]);
 
+  addMissingColumns(db, 'evaluation_results', [
+    ['fundamento', 'TEXT'],
+    ['criticidad', 'TEXT'],
+    ['principio_iso', 'TEXT'],
+    ['confianza', 'REAL'],
+    ['escalado', 'INTEGER NOT NULL DEFAULT 0'],
+    ['motivo_escalamiento', 'TEXT'],
+  ]);
+
+  addMissingColumns(db, 'findings', [
+    ['rewrite', 'TEXT'],
+    ['rewrite_note', 'TEXT'],
+  ]);
+
   addMissingColumns(db, 'evaluations', [
+    ['metricas', 'TEXT'],
+    ['perfil', 'TEXT'],
+    ['consolidado', 'TEXT'],
     ['engine', "TEXT NOT NULL DEFAULT 'deterministic'"],
     ['validated_by', 'TEXT'],
     ['validated_at', 'INTEGER'],

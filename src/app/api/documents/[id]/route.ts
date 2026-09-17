@@ -86,7 +86,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const findings = queryAll<FindingRecord>(
     db,
     `SELECT id, document_id, evaluation_id, criterion_id, dimension, source, result, risk, message,
-            evidence_text, evidence_location, section_id, recommendation,
+            evidence_text, evidence_location, section_id, recommendation, rewrite, rewrite_note,
             reference_kind, reference_id, reference_label, status, resolved_by, resolved_at, created_at
      FROM findings WHERE document_id = ? ORDER BY created_at DESC`,
     id,

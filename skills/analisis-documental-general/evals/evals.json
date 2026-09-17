@@ -1,0 +1,48 @@
+{
+  "skill_name": "analisis-documental-general",
+  "evals": [
+    {
+      "id": 0,
+      "nombre": "informe-tecnico-denso",
+      "prompt": "Evalúa la claridad de este informe técnico de la OTI que va a la Gerencia General. Necesito el resultado en el formato que consume el SACD.",
+      "expected_output": "Resumen ejecutivo + JSON del esquema 8.2 con los 10 criterios D4, métricas calculadas con el script, citas literales verificables, consolidado de dimensión No cumple o Cumple parcialmente, y reescritura de los pasajes de criticidad alta/media.",
+      "files": [
+        "evals/files/informe-tecnico.txt"
+      ]
+    },
+    {
+      "id": 1,
+      "nombre": "notificacion-plazo-no-computable",
+      "prompt": "Revisa esta notificación que va a un titular de título habilitante en Madre de Dios. ¿Se entiende? ¿Qué habría que corregir antes de que salga?",
+      "expected_output": "Detecta que el plazo de treinta (30) días no precisa si es hábil o calendario ni el hito de inicio (D4-08, criticidad alta → dimensión No cumple), la consecuencia del incumplimiento indeterminada, expresiones vagas en pasajes obligacionales, y propone reescritura. Aplica los umbrales de 'notificacion', más estrictos.",
+      "files": [
+        "evals/files/notificacion.txt"
+      ]
+    },
+    {
+      "id": 2,
+      "nombre": "proponer-rubrica-memorando",
+      "prompt": "Necesito la rúbrica de claridad para memorandos internos del SERFOR, para cargarla en el SACD.",
+      "expected_output": "Rúbrica en el esquema 8.1, estado 'borrador', dimension D4_claridad, criticidades de la columna 'Memorando' de la rúbrica de referencia, umbrales de memorando, y campo 'fuente' por criterio. No debe ejecutar una evaluación.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "nombre": "acta-supervision-campo",
+      "prompt": "Esta acta la levantó la ATFFS Ucayali en una supervisión a una comunidad nativa. Revísala antes de que se notifique al titular.",
+      "expected_output": "Perfil derivado ciudadano/registra. D4-05 (agente) y D4-07 (concreción) en criticidad Alta por la función 'registra'. Detecta que el acta no precisa qué se constató, cuántos árboles, qué parcelas ni quién verificó, lo que la inutiliza como medio probatorio. D4-03 puede ser NA justificado.",
+      "files": [
+        "evals/files/acta-supervision.txt"
+      ]
+    },
+    {
+      "id": 4,
+      "nombre": "directiva-normativa",
+      "prompt": "Evalúa la claridad de esta directiva antes de que vaya a aprobación por resolución.",
+      "expected_output": "Perfil interno/regula. D4-02, D4-06, D4-07 y D4-08 en Alta por la función 'regula'; umbral de Szigriszt endurecido en 5 puntos. Detecta que casi todas las disposiciones son indeterminadas ('según corresponda', 'que resulten adecuadas', 'plazos de ley'), de modo que la directiva no regula nada verificable.",
+      "files": [
+        "evals/files/directiva.txt"
+      ]
+    }
+  ]
+}

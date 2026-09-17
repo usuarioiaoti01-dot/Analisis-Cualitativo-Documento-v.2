@@ -7,6 +7,15 @@ import { textoEvaluable } from '@/lib/tramite';
 import { ErrorDeContraste, ejecutarContraste } from '@/lib/contraste';
 import { construirBaseDeConocimiento } from '@/lib/base-conocimiento';
 import { tiposPertinentesPara } from '@/lib/tipos-normativos';
+import { VEREDICTOS, consolidar, escalamiento, normalizarConfianza } from '@/lib/veredictos';
+import {
+  medirClaridad,
+  metodoDeAnalisis,
+  metricasParaElPrompt,
+  perfilDe,
+  type MetricasDeClaridad,
+  type PerfilDelDocumento,
+} from '@/lib/skill-claridad';
 import {
   ErrorDeMotor,
   MODELO,
@@ -105,6 +114,31 @@ export async function POST(request: Request) {
     : evaluarDeterminista(db, documento.id, templateId, criterios);
 }
 
+/** Resultado de un criterio, listo para persistir. */
+interface ResultadoPersistible {
+  criterio: CriterioParaEvaluar;
+  resultado: CriterionOutcome;
+  rawScore: number | null;
+  weightedScore: number;
+  comentario: string;
+  fundamento?: string | null;
+  criticidad?: string | null;
+  principioIso?: string | null;
+  confianza?: number | null;
+  escalado?: boolean;
+  motivoEscalamiento?: string | null;
+  hallazgos: {
+    mensaje: string;
+    riesgo: string;
+    recomendacion: string;
+    evidenciaTexto: string;
+    evidenciaUbicacion: string;
+    seccionId: number | null;
+    reescritura?: string | null;
+    reescrituraNota?: string | null;
+  }[];
+}
+
 /* ── Etapa 4: evaluación cualitativa asistida ──────────────────────────── */
 
 async function evaluarConMotorIa(
@@ -144,7 +178,17 @@ async function evaluarConMotorIa(
   // afirma se corresponde con lo que dice la norma que invoca.
   const base = await construirBaseDeConocimiento(db, evaluable.texto, {
     tiposPertinentes: tiposPertinentesPara(documento.document_type),
+    criterios: criterios.map((criterio) =>
+      [criterio.dimension, criterio.description, criterio.indicator, criterio.rule]
+        .filter(Boolean)
+        .join(' '),
+    ),
   });
+
+  // El método de la skill y su medición objetiva, antes de emitir juicio: es
+  // el orden que el propio procedimiento impone.
+  const perfil = perfilDe(documento.document_type);
+  const metricas = await medirClaridad(evaluable.texto, perfil.destinatario);
 
   let respuesta;
   try {
@@ -153,6 +197,10 @@ async function evaluarConMotorIa(
       criterios,
       { titulo: documento.title, tipoDocumental: documento.document_type },
       base.texto,
+      {
+        procedimiento: await metodoDeAnalisis(),
+        medicion: metricasParaElPrompt(metricas, perfil),
+      },
     );
   } catch (error) {
     if (error instanceof ErrorDeMotor) {
@@ -163,21 +211,7 @@ async function evaluarConMotorIa(
 
   const porId = new Map(criterios.map((criterio) => [criterio.id, criterio]));
 
-  const resultados: {
-    criterio: CriterioParaEvaluar;
-    resultado: CriterionOutcome;
-    rawScore: number | null;
-    weightedScore: number;
-    comentario: string;
-    hallazgos: {
-      mensaje: string;
-      riesgo: string;
-      recomendacion: string;
-      evidenciaTexto: string;
-      evidenciaUbicacion: string;
-      seccionId: number | null;
-    }[];
-  }[] = [];
+  const resultados: ResultadoPersistible[] = [];
 
   let citasDescartadas = 0;
 
@@ -185,15 +219,23 @@ async function evaluarConMotorIa(
     const criterio = porId.get(item.criterio_id);
     if (!criterio) continue; // El motor devolvió un criterio que no se le pidió.
 
-    const rawScore = normalizarPuntaje(item, criterio.scale_max);
+    const resultado = VEREDICTOS[item.veredicto] ?? 'no_evaluable';
+    const rawScore = normalizarPuntaje(item, resultado, criterio.scale_max);
+    const confianza = normalizarConfianza(item.confianza);
 
     resultados.push({
       criterio,
-      resultado: item.resultado,
+      resultado,
       rawScore,
-      // Un criterio que no aplica no aporta ni resta: se excluye del ponderado.
+      // Un criterio que no aplica ni se pudo evaluar no aporta ni resta: se
+      // excluye del ponderado.
       weightedScore: rawScore === null ? 0 : (rawScore / criterio.scale_max) * criterio.weight,
       comentario: item.comentario ?? '',
+      fundamento: item.fundamento ?? null,
+      criticidad: item.criticidad ?? null,
+      principioIso: item.principio_iso ?? null,
+      confianza,
+      ...escalamiento(resultado, item.criticidad, confianza),
       hallazgos: (item.hallazgos ?? []).flatMap((hallazgo) => {
         const evidencia = verificarCita(contenido.content, secciones, hallazgo.cita_textual ?? '');
 
@@ -212,6 +254,10 @@ async function evaluarConMotorIa(
             evidenciaTexto: evidencia.texto,
             evidenciaUbicacion: evidencia.ubicacion,
             seccionId: evidencia.seccionId,
+            // La reescritura solo vale con su salvedad: una propuesta que
+            // inventa un plazo y no lo declara es peor que ninguna.
+            reescritura: hallazgo.reescritura?.trim() || null,
+            reescrituraNota: hallazgo.reescritura_nota?.trim() || null,
           },
         ];
       }),
@@ -253,6 +299,9 @@ async function evaluarConMotorIa(
     engine: 'ai',
     score,
     resultados,
+    metricas,
+    perfil,
+    consolidado: consolidar(resultados),
     citasDescartadas,
     base,
     seccionesOmitidas: evaluable.omitidas,
@@ -262,8 +311,14 @@ async function evaluarConMotorIa(
 }
 
 /** Un puntaje fuera de la escala es un error del motor, no un resultado válido. */
-function normalizarPuntaje(item: ResultadoDelModelo, scaleMax: number): number | null {
-  if (item.resultado === 'no_aplica') return null;
+function normalizarPuntaje(
+  item: ResultadoDelModelo,
+  resultado: CriterionOutcome,
+  scaleMax: number,
+): number | null {
+  // «No aplica» y «no evaluable» no puntúan: el primero porque el criterio no
+  // rige, el segundo porque no hay con qué puntuar.
+  if (resultado === 'no_aplica' || resultado === 'no_evaluable') return null;
   if (typeof item.puntaje !== 'number' || !Number.isFinite(item.puntaje)) return null;
 
   return Math.min(scaleMax, Math.max(1, Math.round(item.puntaje)));
@@ -328,21 +383,13 @@ interface DatosAPersistir {
   templateId: number;
   engine: 'ai' | 'deterministic';
   score: number | null;
-  resultados: {
-    criterio: CriterioParaEvaluar;
-    resultado: CriterionOutcome;
-    rawScore: number | null;
-    weightedScore: number;
-    comentario: string;
-    hallazgos: {
-      mensaje: string;
-      riesgo: string;
-      recomendacion: string;
-      evidenciaTexto: string;
-      evidenciaUbicacion: string;
-      seccionId: number | null;
-    }[];
-  }[];
+  resultados: ResultadoPersistible[];
+  /** Medición objetiva de la skill, si pudo calcularse. */
+  metricas?: MetricasDeClaridad | null;
+  /** Encuadre aplicado: lector previsto y función del documento. */
+  perfil?: PerfilDelDocumento;
+  /** Consolidación cualitativa de la dimensión. */
+  consolidado?: { resultado: string; regla: string };
   citasDescartadas: number;
   /** Catálogo que se puso a disposición del motor. */
   base?: { incluidas: { code: string; motivo: string }[]; totalCatalogo: number };
@@ -364,21 +411,35 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
 
   inTransaction(db, () => {
     db.prepare(
-      `INSERT INTO evaluations (id, document_id, template_id, score, status, created_at, engine)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(evaluationId, datos.documentId, datos.templateId, score, status, now, datos.engine);
+      `INSERT INTO evaluations (id, document_id, template_id, score, status, created_at, engine,
+                                metricas, perfil, consolidado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      evaluationId,
+      datos.documentId,
+      datos.templateId,
+      score,
+      status,
+      now,
+      datos.engine,
+      datos.metricas ? JSON.stringify(datos.metricas) : null,
+      datos.perfil ? JSON.stringify(datos.perfil) : null,
+      datos.consolidado ? JSON.stringify(datos.consolidado) : null,
+    );
 
     const insertResult = db.prepare(
       `INSERT INTO evaluation_results
-         (evaluation_id, criterion_id, dimension, result, raw_score, weighted_score, comment)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (evaluation_id, criterion_id, dimension, result, raw_score, weighted_score, comment,
+          fundamento, criticidad, principio_iso, confianza, escalado, motivo_escalamiento)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     const insertFinding = db.prepare(
       `INSERT INTO findings
          (document_id, evaluation_id, criterion_id, dimension, source, result, risk, message,
-          evidence_text, evidence_location, section_id, recommendation, status, created_at)
-       VALUES (?, ?, ?, ?, 'evaluacion', ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
+          evidence_text, evidence_location, section_id, recommendation, rewrite, rewrite_note,
+          status, created_at)
+       VALUES (?, ?, ?, ?, 'evaluacion', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)`,
     );
 
     // Los hallazgos de evaluación se reemplazan; los de las etapas 5 y 6 no se tocan.
@@ -395,6 +456,12 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
         resultado.rawScore,
         resultado.rawScore === null ? null : resultado.weightedScore,
         resultado.comentario,
+        resultado.fundamento ?? null,
+        resultado.criticidad ?? null,
+        resultado.principioIso ?? null,
+        resultado.confianza ?? null,
+        resultado.escalado ? 1 : 0,
+        resultado.motivoEscalamiento ?? null,
       );
 
       for (const hallazgo of resultado.hallazgos) {
@@ -410,6 +477,8 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
           hallazgo.evidenciaUbicacion,
           hallazgo.seccionId,
           hallazgo.recomendacion,
+          hallazgo.reescritura ?? null,
+          hallazgo.reescrituraNota ?? null,
           now,
         );
         hallazgosGuardados += 1;
@@ -454,6 +523,20 @@ function persistir(db: ReturnType<typeof getDb>, datos: DatosAPersistir) {
       resumen: {
         criterios: datos.resultados.length,
         hallazgos: hallazgosGuardados,
+        // Lo que aporta el método de la skill: consolidación cualitativa,
+        // criterios que esperan a una persona y legibilidad medida.
+        consolidado: datos.consolidado ?? null,
+        escalados: datos.resultados.filter((r) => r.escalado).length,
+        no_evaluables: datos.resultados.filter((r) => r.resultado === 'no_evaluable').length,
+        legibilidad: datos.metricas
+          ? {
+              szigriszt: datos.metricas.szigriszt_pazos,
+              escala: datos.metricas.escala_inflesz,
+              palabras_por_oracion: datos.metricas.palabras_por_oracion,
+              fuera_de_umbral: datos.metricas.fuera_de_umbral?.length ?? 0,
+            }
+          : null,
+        perfil: datos.perfil ?? null,
         contraste: contraste
           ? { hallazgos: contraste.hallazgos, ...contraste.resumen }
           : null,

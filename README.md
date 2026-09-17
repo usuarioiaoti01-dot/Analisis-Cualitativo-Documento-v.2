@@ -126,6 +126,20 @@ El aporte de un criterio es `(puntaje / escala) × peso`; los criterios
 El detalle del motor, sus decisiones y la verificación de evidencia están en
 [`docs/proceso-de-evaluacion.md`](docs/proceso-de-evaluacion.md).
 
+## El método de análisis
+
+El motor aplica la skill **`analisis-documental-general`** del SERFOR, copiada en
+`skills/analisis-documental-general/`: encuadre por lector y función, medición
+objetiva con su script antes de emitir juicio, veredictos C/CP/NC/NA/**NE**,
+criticidad, confianza, escalamiento a revisión humana y reescritura del pasaje
+observado. El método lo pone la skill; los criterios, la matriz aprobada.
+
+Requiere **Python** en el servidor para el script de métricas (`SACD_PYTHON` si el
+ejecutable no se llama `python`). Sin él la evaluación sigue, sin métricas y
+diciéndolo.
+
+Detalle en [docs/proceso-de-evaluacion.md](docs/proceso-de-evaluacion.md).
+
 ## Carga y extracción de texto
 
 El cargador acepta **PDF, DOCX y XLSX** hasta 25 MB. Al subir un archivo:

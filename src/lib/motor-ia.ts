@@ -38,13 +38,22 @@ export interface HallazgoDelModelo {
   cita_textual: string;
   riesgo: 'bajo' | 'medio' | 'alto' | 'critico';
   recomendacion: string;
+  /** Reescritura del pasaje citado, cuando admite corrección. */
+  reescritura: string;
+  /** Salvedad: qué dato de la propuesta no sale del documento. */
+  reescritura_nota: string;
 }
 
 export interface ResultadoDelModelo {
   criterio_id: number;
-  resultado: 'cumple' | 'parcial' | 'no_cumple' | 'no_aplica';
+  /** Veredicto de la skill: C, CP, NC, NA o NE. */
+  veredicto: 'C' | 'CP' | 'NC' | 'NA' | 'NE';
+  criticidad: 'alta' | 'media' | 'baja';
+  principio_iso: 'encuentra' | 'entiende' | 'usa' | 'relevante';
   puntaje: number | null;
   comentario: string;
+  fundamento: string;
+  confianza: number;
   hallazgos: HallazgoDelModelo[];
 }
 
@@ -89,15 +98,42 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
           items: {
             type: 'object',
             additionalProperties: false,
-            required: ['criterio_id', 'resultado', 'puntaje', 'comentario', 'hallazgos'],
+            required: [
+              'criterio_id',
+              'veredicto',
+              'criticidad',
+              'principio_iso',
+              'puntaje',
+              'comentario',
+              'fundamento',
+              'confianza',
+              'hallazgos',
+            ],
             properties: {
               criterio_id: {
                 type: 'integer',
                 description: 'Identificador del criterio evaluado, tal como se entregó.',
               },
-              resultado: {
+              veredicto: {
                 type: 'string',
-                enum: ['cumple', 'parcial', 'no_cumple', 'no_aplica'],
+                enum: ['C', 'CP', 'NC', 'NA', 'NE'],
+                description:
+                  'C cumple · CP cumple parcialmente · NC no cumple · NA no aplica · ' +
+                  'NE no evaluable. NE es obligatorio cuando no encuentras cita literal que ' +
+                  'sustente el juicio, o cuando no recorriste el documento entero para afirmar ' +
+                  'una ausencia. NE nunca se sustituye por NC.',
+              },
+              criticidad: {
+                type: 'string',
+                enum: ['alta', 'media', 'baja'],
+                description:
+                  'Criticidad del criterio según el perfil del documento, conforme a la ' +
+                  'rúbrica D4 del método.',
+              },
+              principio_iso: {
+                type: 'string',
+                enum: ['encuentra', 'entiende', 'usa', 'relevante'],
+                description: 'Principio de la ISO 24495-1 en que se funda el veredicto.',
               },
               puntaje: {
                 // La salida estructurada no admite `minimum`/`maximum`: el
@@ -106,18 +142,39 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
                 type: ['integer', 'null'],
                 description:
                   `Puntaje entero de 1 a ${escalaMaxima} en la escala del criterio. ` +
-                  'Nulo solo si el resultado es no_aplica.',
+                  'Nulo si el veredicto es NA o NE.',
               },
               comentario: {
                 type: 'string',
-                description: 'Justificación breve del resultado, en español, referida al documento.',
+                description:
+                  'El hallazgo en una frase: qué defecto concreto se observó, no una ' +
+                  'valoración genérica. Si el veredicto es C, qué es lo que cumple.',
+              },
+              fundamento: {
+                type: 'string',
+                description:
+                  'Por qué esa evidencia sustenta ese veredicto, invocando el principio ISO ' +
+                  'o la métrica correspondiente.',
+              },
+              confianza: {
+                type: 'number',
+                description:
+                  'Grado de certeza del veredicto, de 0 a 1 con dos decimales. Por debajo de ' +
+                  '0,70 el criterio se escala a revisión humana.',
               },
               hallazgos: {
                 type: 'array',
                 items: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['mensaje', 'cita_textual', 'riesgo', 'recomendacion'],
+                  required: [
+                    'mensaje',
+                    'cita_textual',
+                    'riesgo',
+                    'recomendacion',
+                    'reescritura',
+                    'reescritura_nota',
+                  ],
                   properties: {
                     mensaje: {
                       type: 'string',
@@ -133,6 +190,19 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
                       type: 'string',
                       description: 'Ajuste concreto que corregiría el hallazgo.',
                     },
+                    reescritura: {
+                      type: 'string',
+                      description:
+                        'Versión corregida del pasaje citado, conservando el contenido ' +
+                        'jurídico y las referencias normativas. Cadena vacía si el pasaje no ' +
+                        'puede reescribirse sin decidir algo que corresponde al área usuaria.',
+                    },
+                    reescritura_nota: {
+                      type: 'string',
+                      description:
+                        'Qué dato de la propuesta no sale del documento y debe fijarlo el ' +
+                        'área usuaria. Cadena vacía si no aplica.',
+                    },
                   },
                 },
               },
@@ -145,7 +215,10 @@ function esquemaDeSalida(criterios: CriterioParaEvaluar[]) {
 }
 
 const INSTRUCCIONES = `Eres un evaluador documental de la Dirección de Políticas del SERFOR (Perú).
-Tu trabajo es evaluar un documento institucional contra una matriz de criterios aprobada.
+Evalúas un documento institucional contra la matriz de criterios aprobada por la
+entidad, aplicando el método de la skill «analisis-documental-general» que se te
+entrega a continuación. El método gobierna CÓMO evalúas; la matriz dice QUÉ se
+evalúa. Ninguno de los dos sustituye al otro.
 
 Reglas que no puedes quebrantar:
 
@@ -166,7 +239,17 @@ Reglas que no puedes quebrantar:
 7. Junto al documento recibes el catálogo normativo de la entidad. Es la única
    referencia normativa admitida: no declares un incumplimiento apoyándote en
    normas que no figuren allí ni en tu conocimiento general de la legislación,
-   porque el revisor no podría verificarlo contra nada.`;
+   porque el revisor no podría verificarlo contra nada.
+8. Un criterio sin cita literal que lo sustente es NE, nunca NC. Tampoco afirmes
+   una ausencia —«no consigna el plazo»— sin haber recorrido el documento entero
+   buscando ese dato; si solo revisaste fragmentos, el veredicto es NE.
+9. Evalúa un criterio a la vez. Evaluarlos en bloque contamina los juicios: un
+   documento con oraciones largas arrastra calificaciones bajas en criterios que
+   nada tienen que ver con la longitud.
+10. Las métricas son indicio, no veredicto: un umbral rebasado no es un defecto
+   si el pasaje, leído, resulta claro. Y claro no es simple: no observes el uso
+   de terminología técnica en un documento técnico, salvo que su lector previsto
+   no pueda resolverla.`;
 
 /** Presenta la matriz de forma que el modelo pueda responder criterio por criterio. */
 function describirCriterios(criterios: CriterioParaEvaluar[]): string {
@@ -231,6 +314,8 @@ export async function evaluarConIa(
   metadatos: { titulo: string; tipoDocumental: string },
   /** Catálogo normativo que sirve de referencia. Véase `base-conocimiento`. */
   baseDeConocimiento = '',
+  /** Método de la skill y medición objetiva. Véase `skill-claridad`. */
+  metodo: { procedimiento: string; medicion: string } = { procedimiento: '', medicion: '' },
 ): Promise<RespuestaDelMotor> {
   const client = crearCliente();
 
@@ -243,7 +328,9 @@ export async function evaluarConIa(
   ].join('\n');
 
   const instruccion = [
-    'Evalúa el documento anterior contra los siguientes criterios.',
+    'Evalúa el documento anterior contra los siguientes criterios, con el método',
+    'de la skill: encuadre declarado, un criterio a la vez, cita literal por',
+    'veredicto, y NE cuando no haya prueba.',
     `Devuelve exactamente ${criterios.length} resultados: uno por cada criterio_id listado,`,
     'sin omitir ninguno y sin repetir ninguno.',
     '',
@@ -256,6 +343,8 @@ export async function evaluarConIa(
       model: MODELO,
       system: [
         { type: 'text', text: INSTRUCCIONES },
+        ...(metodo.procedimiento ? [{ type: 'text' as const, text: metodo.procedimiento }] : []),
+        ...(metodo.medicion ? [{ type: 'text' as const, text: metodo.medicion }] : []),
         ...(baseDeConocimiento ? [{ type: 'text' as const, text: baseDeConocimiento }] : []),
       ],
       messages: [{ role: 'user', content: contextoDocumento }],
@@ -278,9 +367,19 @@ export async function evaluarConIa(
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high', format: esquemaDeSalida(criterios) },
       system: [
-        // El documento y el catálogo se cachean: reevaluarlo con otra matriz
-        // no vuelve a pagar ni uno ni otro.
+        // El documento, el método y el catálogo se cachean: reevaluarlo con
+        // otra matriz no vuelve a pagar ninguno de los tres.
         { type: 'text', text: INSTRUCCIONES },
+        ...(metodo.procedimiento
+          ? [
+              {
+                type: 'text' as const,
+                text: metodo.procedimiento,
+                cache_control: { type: 'ephemeral' as const },
+              },
+            ]
+          : []),
+        ...(metodo.medicion ? [{ type: 'text' as const, text: metodo.medicion }] : []),
         ...(baseDeConocimiento
           ? [
               {

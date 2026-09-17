@@ -47,6 +47,9 @@ const OUTCOME_TONE: Record<CriterionOutcome, string> = {
   parcial: 'bg-sev-medium-bg text-sev-medium-ink',
   no_cumple: 'bg-sev-high-bg text-sev-high-ink',
   no_aplica: 'bg-slate-100 text-slate-600',
+  // «No evaluable» no es un gris más: es un criterio que quedó sin resolver y
+  // que espera a una persona. Se distingue de «no aplica», que ya está cerrado.
+  no_evaluable: 'bg-blue-50 text-blue-700',
 };
 
 const RISK_TONE: Record<Risk, string> = {
@@ -595,15 +598,18 @@ function Resultados({
         <p className="mb-4 rounded-lg bg-sev-high-bg px-4 py-3 text-sm text-sev-high-ink">{aviso}</p>
       )}
 
+      {evaluacion && <MetodoAplicado evaluacion={evaluacion} results={results} />}
+
       <div className="overflow-x-auto rounded-lg border border-hairline">
         <table className="w-full min-w-[36rem] text-left text-sm">
           <thead>
             <tr className="bg-canvas/70 text-[0.6875rem] tracking-[0.12em] text-ink-muted uppercase">
               <th className="px-5 py-3 font-semibold">Criterio</th>
-              <th className="px-5 py-3 font-semibold">Resultado</th>
+              <th className="px-5 py-3 font-semibold">Veredicto</th>
+              <th className="px-5 py-3 font-semibold">Criticidad</th>
+              <th className="px-5 py-3 font-semibold">Confianza</th>
               <th className="px-5 py-3 font-semibold">Puntaje</th>
               <th className="px-5 py-3 font-semibold">Peso</th>
-              <th className="px-5 py-3 font-semibold">Aporte</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline">
@@ -615,6 +621,15 @@ function Resultados({
                   {result.criterion_indicator && (
                     <p className="mt-0.5 max-w-lg text-xs text-ink-muted">{result.criterion_indicator}</p>
                   )}
+                  {result.comment && (
+                    <p className="mt-1.5 max-w-lg text-xs text-ink">{result.comment}</p>
+                  )}
+                  {result.fundamento && (
+                    <p className="mt-1 max-w-lg text-xs text-ink-muted">
+                      <span className="font-medium">Fundamento:</span> {result.fundamento}
+                      {result.principio_iso ? ` · Principio ISO: ${result.principio_iso}` : ''}
+                    </p>
+                  )}
                 </td>
                 <td className="px-5 py-3">
                   <span
@@ -622,14 +637,27 @@ function Resultados({
                   >
                     {OUTCOME_LABEL[result.result]}
                   </span>
+                  {result.escalado === 1 && (
+                    <span
+                      className="mt-1 block text-xs text-sev-medium-ink"
+                      title={result.motivo_escalamiento ?? undefined}
+                    >
+                      Revisión humana
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3 whitespace-nowrap text-ink-muted capitalize">
+                  {result.criticidad ?? '—'}
+                </td>
+                <td className="px-5 py-3 whitespace-nowrap text-ink-muted">
+                  {result.confianza !== null && result.confianza !== undefined
+                    ? result.confianza.toFixed(2)
+                    : '—'}
                 </td>
                 <td className="px-5 py-3 whitespace-nowrap text-ink-muted">
                   {result.raw_score ?? '—'} / {result.scale_max ?? 5}
                 </td>
                 <td className="px-5 py-3 text-ink-muted">{result.criterion_weight ?? '—'}%</td>
-                <td className="px-5 py-3 whitespace-nowrap text-ink-muted">
-                  {result.weighted_score !== null ? `${result.weighted_score.toFixed(1)} pts` : '—'}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -637,6 +665,83 @@ function Resultados({
       </div>
     </div>
   );
+}
+
+/**
+ * Lo que aporta el método de la skill y que no cabe en la tabla: con qué
+ * encuadre se evaluó, qué dice la consolidación cualitativa —que no es el
+ * promedio— y qué midió el script antes de emitir juicio.
+ */
+function MetodoAplicado({
+  evaluacion,
+  results,
+}: {
+  evaluacion: EvaluationRecord;
+  results: EvaluationResultRecord[];
+}) {
+  const perfil = leerJson<{ destinatario: string; funcion: string; justificacion: string }>(
+    evaluacion.perfil,
+  );
+  const consolidado = leerJson<{ resultado: string; regla: string }>(evaluacion.consolidado);
+  const metricas = leerJson<{
+    szigriszt_pazos: number;
+    escala_inflesz: string;
+    palabras_por_oracion: number;
+    oracion_mas_larga: number;
+    densidad_pasiva: number;
+    fuera_de_umbral?: string[];
+  }>(evaluacion.metricas);
+
+  if (!perfil && !consolidado && !metricas) return null;
+
+  const escalados = results.filter((resultado) => resultado.escalado === 1).length;
+
+  return (
+    <div className="mb-4 space-y-3 rounded-lg border border-hairline p-4 text-sm">
+      {consolidado && (
+        <p>
+          <span className="font-semibold text-ink">Dimensión: {consolidado.resultado}.</span>{' '}
+          <span className="text-ink-muted">{consolidado.regla}.</span>
+        </p>
+      )}
+
+      {perfil && (
+        <p className="text-ink-muted">
+          <span className="font-medium text-ink">Encuadre:</span> lector {perfil.destinatario}, el
+          documento {perfil.funcion}. {perfil.justificacion}
+        </p>
+      )}
+
+      {metricas && (
+        <p className="text-ink-muted">
+          <span className="font-medium text-ink">Legibilidad:</span> Szigriszt-Pazos{' '}
+          {metricas.szigriszt_pazos} ({metricas.escala_inflesz}) · {metricas.palabras_por_oracion}{' '}
+          palabras por oración · oración más larga {metricas.oracion_mas_larga} · voz pasiva{' '}
+          {metricas.densidad_pasiva}%
+          {metricas.fuera_de_umbral && metricas.fuera_de_umbral.length > 0
+            ? ` · fuera de umbral: ${metricas.fuera_de_umbral.join(', ')}`
+            : ' · dentro de los umbrales del perfil'}
+        </p>
+      )}
+
+      {escalados > 0 && (
+        <p className="text-sev-medium-ink">
+          {escalados} criterio(s) escalados a revisión humana: veredicto no evaluable,
+          incumplimiento de criticidad alta o confianza por debajo de 0,70.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Los bloques del método viajan como JSON en una columna de texto. */
+function leerJson<T>(valor: string | null | undefined): T | null {
+  if (!valor) return null;
+  try {
+    return JSON.parse(valor) as T;
+  } catch {
+    return null;
+  }
 }
 
 const SOURCE_TONE: Record<FindingSource, string> = {
@@ -710,6 +815,21 @@ function Hallazgos({
               )}
               {finding.evidence_location && (
                 <p className="mt-1 text-xs text-ink-muted">{finding.evidence_location}</p>
+              )}
+              {/* La reescritura es el entregable que el revisor puede pegar en el
+                  documento; su salvedad dice qué dato no sale del texto. */}
+              {finding.rewrite && (
+                <div className="mt-3 rounded-lg border border-hairline bg-canvas/50 p-3">
+                  <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">
+                    Reescritura propuesta
+                  </p>
+                  <p className="mt-1.5 text-sm text-ink">{finding.rewrite}</p>
+                  {finding.rewrite_note && (
+                    <p className="mt-1.5 text-xs text-sev-medium-ink">
+                      Salvedad: {finding.rewrite_note}
+                    </p>
+                  )}
+                </div>
               )}
               {finding.recommendation && (
                 <p className="mt-2 text-sm text-ink">

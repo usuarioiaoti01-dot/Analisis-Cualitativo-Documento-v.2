@@ -96,7 +96,7 @@ interface FilaNorma {
 export async function construirBaseDeConocimiento(
   db: DatabaseSync,
   textoDelDocumento: string,
-  opciones: { tiposPertinentes?: string[] } = {},
+  opciones: { tiposPertinentes?: string[]; criterios?: string[] } = {},
 ): Promise<BaseDeConocimiento> {
   const normas = queryAll<FilaNorma>(
     db,
@@ -131,8 +131,13 @@ export async function construirBaseDeConocimiento(
   // y solo si queda presupuesto, las normas que hablan de lo mismo. El resto
   // del catálogo figura en el índice, que es barato: saber que una norma existe
   // basta para observar que el documento la omite.
+  // Los criterios de la matriz entran en el vocabulario: si un criterio
+  // pregunta por penalidades, las normas que regulan penalidades son
+  // pertinentes aunque el documento evaluado apenas las nombre.
   const tipos = opciones.tiposPertinentes ?? [];
-  const vocabulario = palabrasDe(textoDelDocumento);
+  const vocabulario = palabrasDe(
+    [textoDelDocumento, ...(opciones.criterios ?? [])].join('\n'),
+  );
 
   const porPertinencia = normas
     .filter(
