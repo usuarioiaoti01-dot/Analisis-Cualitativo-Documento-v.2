@@ -63,7 +63,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const evaluations = queryAll<EvaluationRecord>(
     db,
     `SELECT id, document_id, template_id, score, status, created_at, engine,
-            validated_by, validated_at, validation_note
+            validated_by, validated_at, validation_note, metricas, perfil, consolidado
      FROM evaluations WHERE document_id = ? ORDER BY created_at DESC`,
     id,
   );
@@ -74,6 +74,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         db,
         `SELECT r.id, r.evaluation_id, r.criterion_id, r.dimension, r.result,
                 r.raw_score, r.weighted_score, r.comment,
+                r.fundamento, r.criticidad, r.principio_iso, r.confianza,
+                r.escalado, r.motivo_escalamiento,
                 c.description AS criterion_description, c.indicator AS criterion_indicator,
                 c.weight AS criterion_weight, c.scale_max
          FROM evaluation_results r
